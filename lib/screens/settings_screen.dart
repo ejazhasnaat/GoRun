@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/audio_settings_model.dart';
 import '../services/theme_service.dart';
 import '../services/feedback_settings_service.dart';
 import '../services/audio_settings_service.dart';
-import '../audio/audio_playback_engine.dart';
 import 'audio_settings_screen.dart';
 import 'height_weight_screen.dart';
 
@@ -16,7 +14,7 @@ class SettingsScreen extends StatelessWidget {
     final themeService = Provider.of<ThemeService>(context);
     final feedbackService = Provider.of<FeedbackSettingsService>(context);
     final audioService = Provider.of<AudioSettingsService>(context);
-    final settings = audioService.settings;
+    final audioSettings = audioService.settings;
     final isMetric = feedbackService.isMetric;
 
     String formatHeight(double cm) {
@@ -35,7 +33,7 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: const Text("Settings")),
       body: ListView(
         children: [
-          _sectionHeader("Appearance"),
+          _sectionHeader(context, "Appearance"),
           SwitchListTile(
             title: const Text("Dark Mode"),
             value: themeService.isDarkMode,
@@ -43,36 +41,24 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(),
 
-          _sectionHeader("Audio & Feedback"),
+          _sectionHeader(context, "Audio & Feedback"),
           ListTile(
             title: const Text("Audio Settings"),
-            trailing: Wrap(
-              spacing: 8,
-              children: [
-                _cuePreviewDropdown(settings),
-                const Icon(Icons.arrow_forward_ios, size: 16),
-              ],
+            subtitle: Text(
+              audioSettings.enableTTS 
+                ? "TTS: ${audioSettings.voice} (${audioSettings.style})"
+                : "TTS: Disabled"
             ),
+            leading: const Icon(Icons.volume_up),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => AudioSettingsScreen(),
+                  builder: (_) => const AudioSettingsScreen(),
                 ),
               );
             },
-          ),
-          SwitchListTile(
-            title: const Text("Halfway Cue"),
-            subtitle: const Text("Speak halfway point during interval"),
-            value: settings.enableHalfwayCue,
-            onChanged: (val) => audioService.update(enableHalfwayCue: val),
-          ),
-          SwitchListTile(
-            title: const Text("Countdown Cue"),
-            subtitle: const Text("Countdown last 5 seconds of each interval"),
-            value: settings.enableCountdownCue,
-            onChanged: (val) => audioService.update(enableCountdownCue: val),
           ),
           SwitchListTile(
             title: const Text("Reminders"),
@@ -93,7 +79,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(),
 
-          _sectionHeader("Tracking"),
+          _sectionHeader(context, "Tracking"),
           ListTile(
             title: const Text("Units"),
             subtitle: Text(isMetric ? "Kilometers / Kilograms" : "Miles / Pounds"),
@@ -122,7 +108,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(),
 
-          _sectionHeader("System"),
+          _sectionHeader(context, "System"),
           ListTile(
             title: const Text("Reset All Workouts"),
             trailing: const Icon(Icons.restore),
@@ -168,48 +154,16 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _cuePreviewDropdown(AudioSettingsModel settings) {
-    final cueOptions = {
-      'Warm-up': AudioCueType.warmup,
-      'Run': AudioCueType.run,
-      'Walk': AudioCueType.walk,
-      'Cooldown': AudioCueType.cooldown,
-      'Halfway': AudioCueType.halfway,
-      'Complete': AudioCueType.complete,
-    };
-
-    String selected = 'Warm-up';
-
-    return StatefulBuilder(
-      builder: (context, setState) {
-        return DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            icon: const Icon(Icons.play_arrow),
-            value: selected,
-            items: cueOptions.keys.map((label) {
-              return DropdownMenuItem(
-                value: label,
-                child: Text(label),
-              );
-            }).toList(),
-            onChanged: (label) async {
-              if (label != null) {
-                setState(() => selected = label);
-                final engine = AudioPlaybackEngine(settings);
-                await engine.speakCue(cueOptions[label]!);
-              }
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _sectionHeader(String title) {
+  Widget _sectionHeader(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
-      child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+      child: Text(
+        title, 
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).textTheme.bodySmall?.color,
+        ),
+      ),
     );
   }
 }
-

@@ -3,6 +3,7 @@ import '../models/audio_settings_model.dart';
 import '../helpers/settings_helper.dart';
 
 class AudioSettingsService extends ChangeNotifier {
+  // Keys for persistent storage
   static const _keyEnableTTS = 'enableTTS';
   static const _keyVoice = 'voice';
   static const _keyStyle = 'style';
@@ -21,8 +22,18 @@ class AudioSettingsService extends ChangeNotifier {
   void Function(AudioSettingsModel)? onSettingsChanged;
 
   AudioSettingsService() {
+    // Initialize with default settings before loading persisted values
     _settings = const AudioSettingsModel();
-    _loadSettings();
+  }
+
+  /// Call after SettingsHelper.init() to load saved settings
+  Future<void> init() async {
+    await _loadSettings();
+  }
+
+  /// Reload settings from persistent storage
+  Future<void> reload() async {
+    await _loadSettings();
   }
 
   Future<void> _loadSettings() async {
@@ -43,6 +54,7 @@ class AudioSettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Update partial settings non-destructively and persist
   Future<void> update({
     bool? enableTTS,
     String? voice,
@@ -68,16 +80,22 @@ class AudioSettingsService extends ChangeNotifier {
       cueVolume: cueVolume,
     );
 
-    await SettingsHelper.setBool(_keyEnableTTS, _settings.enableTTS);
-    await SettingsHelper.setString(_keyVoice, _settings.voice);
-    await SettingsHelper.setString(_keyStyle, _settings.style);
-    await SettingsHelper.setBool(_keyStartCue, _settings.enableStartCue);
-    await SettingsHelper.setBool(_keyPauseCue, _settings.enablePauseCue);
-    await SettingsHelper.setBool(_keyResumeCue, _settings.enableResumeCue);
-    await SettingsHelper.setBool(_keyIntervalChangeCue, _settings.enableIntervalChangeCue);
-    await SettingsHelper.setBool(_keyHalfwayCue, _settings.enableHalfwayCue);
-    await SettingsHelper.setBool(_keyCountdownCue, _settings.enableCountdownCue);
-    await SettingsHelper.setDouble(_keyCueVolume, _settings.cueVolume);
+    try {
+      // Persist each setting individually, only after updating the model
+      await SettingsHelper.setBool(_keyEnableTTS, _settings.enableTTS);
+      await SettingsHelper.setString(_keyVoice, _settings.voice);
+      await SettingsHelper.setString(_keyStyle, _settings.style);
+      await SettingsHelper.setBool(_keyStartCue, _settings.enableStartCue);
+      await SettingsHelper.setBool(_keyPauseCue, _settings.enablePauseCue);
+      await SettingsHelper.setBool(_keyResumeCue, _settings.enableResumeCue);
+      await SettingsHelper.setBool(_keyIntervalChangeCue, _settings.enableIntervalChangeCue);
+      await SettingsHelper.setBool(_keyHalfwayCue, _settings.enableHalfwayCue);
+      await SettingsHelper.setBool(_keyCountdownCue, _settings.enableCountdownCue);
+      await SettingsHelper.setDouble(_keyCueVolume, _settings.cueVolume);
+    } catch (e) {
+      // Optionally log errors here without crashing
+      // debugPrint('Failed to persist audio settings: $e');
+    }
 
     onSettingsChanged?.call(_settings);
     notifyListeners();
