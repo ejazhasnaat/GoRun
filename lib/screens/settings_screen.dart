@@ -43,22 +43,18 @@ class SettingsScreen extends StatelessWidget {
 
           _sectionHeader(context, "Audio & Feedback"),
           ListTile(
+            leading: const Icon(Icons.volume_up),
             title: const Text("Audio Settings"),
             subtitle: Text(
-              audioSettings.enableTTS 
-                ? "TTS: ${audioSettings.voice} (${audioSettings.style})"
-                : "TTS: Disabled"
+              audioSettings.enableTTS
+                  ? "TTS: ${audioSettings.voice} (${audioSettings.style})"
+                  : "TTS: Disabled",
             ),
-            leading: const Icon(Icons.volume_up),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AudioSettingsScreen(),
-                ),
-              );
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AudioSettingsScreen()),
+            ),
           ),
           SwitchListTile(
             title: const Text("Reminders"),
@@ -87,18 +83,17 @@ class SettingsScreen extends StatelessWidget {
             onTap: feedbackService.toggleUnits,
           ),
           ListTile(
-            title: const Text("Height / Weight"),
-            subtitle: Text("Height: ${formatHeight(feedbackService.height)}, Weight: ${formatWeight(feedbackService.weight)}"),
             leading: const Icon(Icons.height),
+            title: const Text("Height / Weight"),
+            subtitle: Text(
+              "Height: ${formatHeight(feedbackService.height)}, "
+              "Weight: ${formatWeight(feedbackService.weight)}",
+            ),
             trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const HeightWeightScreen(),
-                ),
-              );
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const HeightWeightScreen()),
+            ),
           ),
           SwitchListTile(
             title: const Text("Disable Sleep"),
@@ -117,7 +112,8 @@ class SettingsScreen extends StatelessWidget {
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text("Reset Workouts?"),
-                  content: const Text("This will erase your progress. Are you sure?"),
+                  content: const Text(
+                      "This will erase your progress. Are you sure?"),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context, false),
@@ -158,12 +154,13 @@ class SettingsScreen extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
       child: Text(
-        title, 
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          color: Theme.of(context).textTheme.bodySmall?.color,
-        ),
+        title,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
       ),
     );
   }
 }
+

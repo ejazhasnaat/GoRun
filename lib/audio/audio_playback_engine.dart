@@ -2,349 +2,276 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../models/audio_settings_model.dart';
 
-enum AudioCueType {
-  warmup,
-  run,
-  walk,
-  cooldown,
-  halfway,
-  complete,
-  start,
-  pause,
-  resume,
-  intervalChange,
-}
+enum AudioCueType { warmup, run, walk, cooldown, halfway, complete }
 
 class AudioPlaybackEngine {
-  final FlutterTts _tts = FlutterTts();
+  final FlutterTts _tts;
   AudioSettingsModel _settings;
   bool _isSpeaking = false;
   List<dynamic> _availableVoices = [];
+  bool _speakCompletionSet = false;
 
-  AudioPlaybackEngine(this._settings) {
-    _initializeTTS();
-  }
+  // Cache for optimized voice selection
+  Map<String, String>? _cachedVoice;
+  String? _lastVoiceQuery;
 
-  Future<void> _initializeTTS() async {
+  // Cache for TTS parameters to avoid redundant calls
+  double? _cachedSpeechRate;
+  double? _cachedPitch;
+  double? _cachedVolume;
+
+  // Pre-computed phrase mappings for better performance
+  static const Map<AudioCueType, String> _phraseMappings = {
+    AudioCueType.warmup: "Start your warm-up now",
+    AudioCueType.run: "Start running",
+    AudioCueType.walk: "Start walking",
+    AudioCueType.cooldown: "Start your cooldown",
+    AudioCueType.halfway: "You're halfway there. Keep going!",
+    AudioCueType.complete: "Workout completed. Good job",
+  };
+
+  // Pre-computed locale mappings
+  static const Map<String, String> _localeMappings = {
+    'UK': 'en-GB',
+    'IN': 'en-IN',
+    'US': 'en-US',
+  };
+
+  // Constructor with optional FlutterTts injection for testing
+  AudioPlaybackEngine(this._settings, {FlutterTts? tts})
+    : _tts = tts ?? FlutterTts();
+
+  Future<void> init() async {
     if (!_settings.enableTTS) return;
 
     try {
-      _availableVoices = await _tts.getVoices;
+      if (_availableVoices.isEmpty) {
+        _availableVoices = await _tts.getVoices;
+      }
 
-      // Configure TTS parameters
-      await _tts.setSpeechRate(_getSpeechRate());
-      await _tts.setPitch(_getPitch());
-      await _tts.setVolume(_settings.cueVolume);
-
+      await _updateTTSParameters();
       await _setLanguageForVoice();
       await _setVoiceForSelection();
 
-      // Wait for speaking completion before continuing
-      await _tts.awaitSpeakCompletion(true);
+      if (!_speakCompletionSet) {
+        await _tts.awaitSpeakCompletion(true);
+        _speakCompletionSet = true;
+      }
 
-      // Set handlers for completion and error
-      _tts.setCompletionHandler(() => _isSpeaking = false);
+      _tts.setCompletionHandler(() {
+        _isSpeaking = false;
+      });
 
       _tts.setErrorHandler((message) {
         _isSpeaking = false;
-        debugPrint("TTS Error: $message");
       });
     } catch (e) {
-      debugPrint("TTS initialization error: $e");
+      if (kDebugMode) debugPrint('TTS init error: $e');
+    }
+  }
+
+  Future<void> _updateTTSParameters() async {
+    final speechRate = _getSpeechRate();
+    final pitch = _getPitch();
+    final volume = _settings.cueVolume;
+
+    if (_cachedSpeechRate != speechRate) {
+      await _tts.setSpeechRate(speechRate);
+      _cachedSpeechRate = speechRate;
+    }
+    if (_cachedPitch != pitch) {
+      await _tts.setPitch(pitch);
+      _cachedPitch = pitch;
+    }
+    if (_cachedVolume != volume) {
+      await _tts.setVolume(volume);
+      _cachedVolume = volume;
     }
   }
 
   Future<void> _setLanguageForVoice() async {
-    String language = "en-US"; // Default
-
-    if (_settings.voice.contains('UK')) {
-      language = "en-GB";
-    } else if (_settings.voice.contains('IN')) {
-      language = "en-IN";
-    } else if (_settings.voice.contains('US')) {
-      language = "en-US";
+    String language = "en-US";
+    for (final entry in _localeMappings.entries) {
+      if (_settings.voice.contains(entry.key)) {
+        language = entry.value;
+        break;
+      }
     }
-
     await _tts.setLanguage(language);
   }
 
   Future<void> _setVoiceForSelection() async {
     if (_availableVoices.isEmpty) return;
 
-    Map<String, String>? selectedVoice;
+    final currentQuery = _settings.voice.toLowerCase();
+    if (_lastVoiceQuery == currentQuery && _cachedVoice != null) return;
 
-    final voiceLower = _settings.voice.toLowerCase();
+    final selectedVoice = _findMatchingVoice(currentQuery);
 
-    // First pass: exact match by gender and locale
-    for (var voice in _availableVoices) {
-      final name = voice['name'].toString().toLowerCase();
-      final locale = voice['locale'].toString().toLowerCase();
-
-      final isGenderMatch =
-          (voiceLower.contains('female') &&
-              (name.contains('female') ||
-                  name.contains('woman') ||
-                  name.contains('girl'))) ||
-          (voiceLower.contains('male') &&
-              (name.contains('male') ||
-                  name.contains('man') ||
-                  name.contains('boy')));
-
-      final isLocaleMatch =
-          (_settings.voice.contains('US') &&
-              (locale.contains('us') || locale.contains('en-us'))) ||
-          (_settings.voice.contains('UK') &&
-              (locale.contains('gb') || locale.contains('en-gb'))) ||
-          (_settings.voice.contains('IN') &&
-              (locale.contains('in') || locale.contains('en-in')));
-
-      if (isGenderMatch && isLocaleMatch) {
-        selectedVoice = voice;
-        break;
-      }
-    }
-
-    // Second pass: broader gender-only match if no exact found
-    if (selectedVoice == null) {
-      for (var voice in _availableVoices) {
-        final name = voice['name'].toString().toLowerCase();
-
-        if (voiceLower.contains('female') &&
-            (name.contains('female') || name.contains('woman'))) {
-          selectedVoice = voice;
-          break;
-        } else if (voiceLower.contains('male') &&
-            (name.contains('male') || name.contains('man'))) {
-          selectedVoice = voice;
-          break;
-        }
-      }
-    }
-
-    // Set the voice if found
     if (selectedVoice != null) {
       try {
         await _tts.setVoice(selectedVoice);
-        debugPrint(
-          "Selected voice: ${selectedVoice['name']} (${selectedVoice['locale']})",
-        );
+        _cachedVoice = selectedVoice;
+        _lastVoiceQuery = currentQuery;
       } catch (e) {
-        debugPrint("Failed to set voice: $e");
+        _cachedVoice = null;
+        _lastVoiceQuery = null;
       }
-    } else {
-      debugPrint("No matching voice found for: ${_settings.voice}");
-      debugPrint(
-        "Available voices: ${_availableVoices.map((v) => "${v['name']} (${v['locale']})").join(', ')}",
-      );
     }
+  }
+
+  Map<String, String>? _findMatchingVoice(String voiceLower) {
+    final genderKeywords = _getGenderKeywords(voiceLower);
+    final localeKeywords = _getLocaleKeywords();
+
+    for (final voice in _availableVoices) {
+      final name = voice['name']?.toString().toLowerCase() ?? '';
+      final locale = voice['locale']?.toString().toLowerCase() ?? '';
+
+      if (_matchesGender(name, genderKeywords) &&
+          _matchesLocale(locale, localeKeywords)) {
+        return Map<String, String>.from(voice as Map);
+      }
+    }
+
+    for (final voice in _availableVoices) {
+      final name = voice['name']?.toString().toLowerCase() ?? '';
+      if (_matchesGender(name, genderKeywords)) {
+        return Map<String, String>.from(voice as Map);
+      }
+    }
+
+    return null;
+  }
+
+  List<String> _getGenderKeywords(String voiceLower) {
+    if (voiceLower.contains('female')) return ['female', 'woman', 'girl'];
+    if (voiceLower.contains('male')) return ['male', 'man', 'boy'];
+    return [];
+  }
+
+  List<String> _getLocaleKeywords() {
+    for (final entry in _localeMappings.entries) {
+      if (_settings.voice.contains(entry.key)) {
+        final locale = entry.value.toLowerCase();
+        return [entry.key.toLowerCase(), locale, locale.replaceAll('-', '')];
+      }
+    }
+    return [];
+  }
+
+  bool _matchesGender(String name, List<String> keywords) {
+    return keywords.any(name.contains);
+  }
+
+  bool _matchesLocale(String locale, List<String> localeKeywords) {
+    return localeKeywords.any(locale.contains);
   }
 
   double _getSpeechRate() {
-    switch (_settings.style.toLowerCase()) {
-      case 'calm':
-        return 0.8;
-      case 'energetic':
-        return 1.0;
-      case 'neutral':
-      default:
-        return 0.9;
-    }
+    const rates = {'calm': 0.8, 'energetic': 1.0, 'neutral': 0.9};
+    return rates[_settings.style.toLowerCase()] ?? 0.9;
   }
 
   double _getPitch() {
-    switch (_settings.style.toLowerCase()) {
-      case 'calm':
-        return 0.8;
-      case 'energetic':
-        return 1.2;
-      case 'neutral':
-      default:
-        return 1.0;
-    }
-  }
-
-  String _applyStyleToText(String text) {
-    switch (_settings.style.toLowerCase()) {
-      case 'calm':
-        return text.replaceAll('!', '.').replaceAll('.', '... ');
-      case 'energetic':
-        return text.endsWith('!') ? text : text.replaceAll('.', '!');
-      case 'neutral':
-      default:
-        return text;
-    }
-  }
-
-  Future<void> reloadSettings(AudioSettingsModel newSettings) async {
-    _settings = newSettings;
-    await stop();
-    if (_settings.enableTTS) {
-      await _initializeTTS();
-    }
+    const pitches = {'calm': 0.8, 'energetic': 1.2, 'neutral': 1.0};
+    return pitches[_settings.style.toLowerCase()] ?? 1.0;
   }
 
   Future<void> speak(String text) async {
-    if (!_settings.enableTTS || text.trim().isEmpty) return;
+    if (!_settings.enableTTS || text.trim().isEmpty) {
+      return;
+    }
 
     try {
-      if (_isSpeaking) {
-        await _tts.stop();
-        await Future.delayed(const Duration(milliseconds: 200));
-      }
+      // Always stop any current or potential speech before starting new one
+      await _tts.stop();
+      await Future.delayed(const Duration(milliseconds: 100));
 
-      final styledText = _applyStyleToText(text);
-
-      await _tts.setVolume(_settings.cueVolume);
-      await _tts.setSpeechRate(_getSpeechRate());
-      await _tts.setPitch(_getPitch());
+      await _updateTTSParameters();
 
       _isSpeaking = true;
-      await _tts.speak(styledText);
+      await _tts.speak(text);
+
+      if (_speakCompletionSet) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (_isSpeaking) _isSpeaking = false;
+      }
     } catch (e) {
+      if (kDebugMode) debugPrint('TTS speak error: $e');
       _isSpeaking = false;
-      debugPrint('TTS Speak Error: $e');
     }
   }
 
   Future<void> speakCue(AudioCueType type) async {
     if (!_settings.enableTTS || !_shouldSpeak(type)) return;
 
-    await _tts.stop();
-
-    final phrase = _getCuePhrase(type);
-    final styledPhrase = _applyStyleToText(phrase);
-
     try {
-      await _tts.setVolume(_settings.cueVolume);
-      await _tts.setSpeechRate(_getSpeechRate());
-      await _tts.setPitch(_getPitch());
+      // Always stop any current or potential speech before starting new one
+      await _tts.stop();
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      final phrase = _phraseMappings[type] ?? "Unknown cue";
+      await _updateTTSParameters();
 
       _isSpeaking = true;
-      await _tts.speak(styledPhrase);
+      await _tts.speak(phrase);
+
+      if (_speakCompletionSet) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (_isSpeaking) _isSpeaking = false;
+      }
     } catch (e) {
+      if (kDebugMode) debugPrint('TTS cue error: $e');
       _isSpeaking = false;
-      debugPrint("TTS speakCue error: $e");
     }
   }
-
-  String _getCuePhrase(AudioCueType type) {
-    final Map<String, List<String>> stylePhrases = {
-      'calm': _getCalmPhrases(),
-      'energetic': _getEnergeticPhrases(),
-      'neutral': _getNeutralPhrases(),
-    };
-
-    final phrases =
-        stylePhrases[_settings.style.toLowerCase()] ?? stylePhrases['neutral']!;
-
-    switch (type) {
-      case AudioCueType.warmup:
-        return phrases[0];
-      case AudioCueType.run:
-        return phrases[1];
-      case AudioCueType.walk:
-        return phrases[2];
-      case AudioCueType.cooldown:
-        return phrases[3];
-      case AudioCueType.halfway:
-        return phrases[4];
-      case AudioCueType.complete:
-        return phrases[5];
-      case AudioCueType.start:
-        return phrases[6];
-      case AudioCueType.pause:
-        return phrases[7];
-      case AudioCueType.resume:
-        return phrases[8];
-      case AudioCueType.intervalChange:
-        return phrases[9];
-    }
-  }
-
-  List<String> _getCalmPhrases() => [
-    "Time to begin your gentle warm-up",
-    "Let's start running at your own pace",
-    "Time for a relaxing walk",
-    "Begin your cool-down routine",
-    "You're halfway through, keep going",
-    "Workout complete. Well done",
-    "Let's begin this journey together",
-    "Take a moment to pause",
-    "Ready to continue when you are",
-    "Moving to the next phase",
-  ];
-
-  List<String> _getEnergeticPhrases() => [
-    "Let's fire up that warm-up!",
-    "Time to run! Give it everything you've got!",
-    "Power walk time! Keep that energy high!",
-    "Cool down time! You crushed it!",
-    "Halfway there! You're absolutely crushing this!",
-    "Workout completed! You're a superstar!",
-    "Let's go! Time to dominate this workout!",
-    "Workout paused! Catch your breath, champion!",
-    "Back in action! Let's finish strong!",
-    "Next interval! Keep that fire burning!",
-  ];
-
-  List<String> _getNeutralPhrases() => [
-    "Start your warm-up now",
-    "Start running",
-    "Start walking",
-    "Start your cooldown",
-    "Halfway there",
-    "Workout completed. Good job",
-    "Let's get started",
-    "Workout paused",
-    "Resuming workout",
-    "Interval change",
-  ];
 
   Future<void> speakCountdown(int seconds) async {
+    const maxCountdown = 5;
     if (!_settings.enableCountdownCue || !_settings.enableTTS) return;
+    if (_isSpeaking || seconds <= 0 || seconds > maxCountdown) return;
 
-    if (seconds > 0 && seconds <= 5) {
-      try {
-        await _tts.setVolume(_settings.cueVolume);
-        await _tts.setSpeechRate(_getSpeechRate());
-        await _tts.setPitch(_getPitch());
+    try {
+      await _updateTTSParameters();
+      _isSpeaking = true;
+      await _tts.speak(seconds.toString());
 
-        _isSpeaking = true;
-        await _tts.speak(seconds.toString());
-      } catch (e) {
-        _isSpeaking = false;
-        debugPrint("TTS countdown error: $e");
+      if (_speakCompletionSet) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (_isSpeaking) _isSpeaking = false;
       }
+    } catch (e) {
+      if (kDebugMode) debugPrint('TTS countdown error: $e');
+      _isSpeaking = false;
     }
   }
 
   String formatDurationReadable(Duration duration) {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
+    final parts = <String>[];
 
-    if (minutes > 0 && seconds > 0) {
-      return "$minutes minute${minutes > 1 ? 's' : ''} and $seconds second${seconds > 1 ? 's' : ''}";
-    } else if (minutes > 0) {
-      return "$minutes minute${minutes > 1 ? 's' : ''}";
-    } else {
-      return "$seconds second${seconds > 1 ? 's' : ''}";
-    }
+    if (minutes > 0) parts.add("$minutes minute${minutes > 1 ? 's' : ''}");
+    if (seconds > 0) parts.add("$seconds second${seconds > 1 ? 's' : ''}");
+
+    return parts.join(' and ');
   }
 
   bool _shouldSpeak(AudioCueType type) {
-    switch (type) {
-      case AudioCueType.halfway:
-        return _settings.enableHalfwayCue;
-      case AudioCueType.start:
-        return _settings.enableStartCue;
-      case AudioCueType.pause:
-        return _settings.enablePauseCue;
-      case AudioCueType.resume:
-        return _settings.enableResumeCue;
-      case AudioCueType.intervalChange:
-        return _settings.enableIntervalChangeCue;
-      default:
-        return true;
+    return type != AudioCueType.halfway || _settings.enableHalfwayCue;
+  }
+
+  Future<void> reloadSettings(AudioSettingsModel newSettings) async {
+    final settingsChanged = _settings != newSettings;
+    _settings = newSettings;
+
+    if (settingsChanged) {
+      _clearCaches();
+      await stop();
+      if (_settings.enableTTS) {
+        await init();
+      }
     }
   }
 
@@ -353,27 +280,24 @@ class AudioPlaybackEngine {
       _isSpeaking = false;
       await _tts.stop();
     } catch (e) {
-      debugPrint("TTS stop error: $e");
+      if (kDebugMode) debugPrint('TTS stop error: $e');
     }
   }
 
   Future<void> dispose() async {
     await stop();
+    _clearCaches();
+  }
+
+  void _clearCaches() {
+    _cachedVoice = null;
+    _lastVoiceQuery = null;
+    _cachedSpeechRate = null;
+    _cachedPitch = null;
+    _cachedVolume = null;
   }
 
   bool get isSpeaking => _isSpeaking;
   List<dynamic> get availableVoices => _availableVoices;
-
-  Future<void> debugPrintAvailableVoices() async {
-    try {
-      final voices = await _tts.getVoices;
-      debugPrint("==== Available TTS Voices ====");
-      for (var voice in voices) {
-        debugPrint("Voice: ${voice.toString()}");
-      }
-      debugPrint("=============================");
-    } catch (e) {
-      debugPrint("Error fetching voices: $e");
-    }
-  }
+  bool get hasVoiceCached => _cachedVoice != null && _lastVoiceQuery != null;
 }

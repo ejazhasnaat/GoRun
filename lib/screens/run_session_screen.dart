@@ -10,7 +10,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:vibration/vibration.dart';
 
 import '../data/z25k_data.dart';
-import '../controllers/timer_controller.dart';
+import '../controllers/intervals_controller.dart';
 import '../audio/audio_playback_engine.dart';
 import '../services/audio_settings_service.dart';
 import '../services/local_storage_service.dart';
@@ -30,56 +30,77 @@ class RunSessionScreen extends StatefulWidget {
 
 class _RunSessionScreenState extends State<RunSessionScreen>
     with TickerProviderStateMixin {
+  // Controllers and Services
   late TimerController _timerController;
   late AudioPlaybackEngine _audioEngine;
   late ConfettiController _confettiController;
   late AudioSettingsService _audioSettingsService;
 
+  // UI Controllers
   final PageController _intervalPageController = PageController(
-    viewportFraction: 0.42,
+    viewportFraction: 0.25,
   );
   final AudioPlayer _tickPlayer = AudioPlayer();
 
+  // State flags
   bool _summaryShown = false;
   bool _isLocked = false;
-  bool _isPaused = false;
   bool _isAnimatingPage = false;
-  bool _hasSpokenInitialSegment = false;
-  bool _hasAnnouncedStart = false;
+  bool _isInitialized = false;
 
-  int _lastSegmentIndex = -1;
-  int _lastCountdownSecond = -1;
-  Timer? _voiceDebounceTimer;
+  // Timers
   Timer? _tickingTimer;
-  Timer? _countdownTimer;
 
+  // Animations
   late AnimationController _pauseResumeController;
   late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    _initializeComponents();
+    _setupListeners();
+    _scheduleInitialSetup();
+  }
 
+  void _initializeComponents() {
+    // Initialize audio settings service
     _audioSettingsService = Provider.of<AudioSettingsService>(
       context,
       listen: false,
     );
     _audioEngine = AudioPlaybackEngine(_audioSettingsService.settings);
 
-    // Listen for settings changes and reload engine
+    // Listen for settings changes
     _audioSettingsService.onSettingsChanged = (newSettings) {
       _audioEngine.reloadSettings(newSettings);
+      // Update timer controller audio settings
+      _timerController.updateAudioSettings(
+        enableTTS: newSettings.enableTTS,
+        enableCountdownCue: newSettings.enableCountdownCue,
+        enableHalfwayCue: newSettings.enableHalfwayCue,
+      );
     };
 
+    // Initialize timer controller
     _timerController = TimerController(
       workout: widget.workout,
       audioEngine: _audioEngine,
     );
 
+    // Set initial audio settings
+    _timerController.updateAudioSettings(
+      enableTTS: _audioSettingsService.settings.enableTTS,
+      enableCountdownCue: _audioSettingsService.settings.enableCountdownCue,
+      enableHalfwayCue: _audioSettingsService.settings.enableHalfwayCue,
+    );
+
+    // Initialize confetti controller
     _confettiController = ConfettiController(
       duration: const Duration(seconds: 3),
     );
 
+    // Initialize animations
     _pauseResumeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
@@ -88,150 +109,52 @@ class _RunSessionScreenState extends State<RunSessionScreen>
       parent: _pauseResumeController,
       curve: Curves.easeInOut,
     );
+  }
 
+  void _setupListeners() {
+    _timerController.addListener(_onTimerUpdate);
+  }
+
+  void _scheduleInitialSetup() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _timerController.start();
-
-      // Announce workout start if enabled
-      if (_audioSettingsService.settings.enableStartCue) {
-        Future.delayed(const Duration(milliseconds: 500), () {
-          _audioEngine.speakCue(AudioCueType.start);
-          _hasAnnouncedStart = true;
-        });
-      }
-
-      // Delay initial onSegmentChange after everything has settled
-      Future.delayed(const Duration(milliseconds: 200), () {
-        _onSegmentChange();
-        _lastSegmentIndex = _timerController.currentIndex;
+      Future.delayed(const Duration(milliseconds: 500), () {
+        setState(() => _isInitialized = true);
       });
     });
-
-    _timerController.addListener(() {
-      final currentIndex = _timerController.currentIndex;
-      if (currentIndex != _lastSegmentIndex) {
-        _onSegmentChange();
-        _lastSegmentIndex = currentIndex;
-      }
-
-      final remaining = _timerController.remainingSeconds;
-
-      // Handle countdown cues
-      _handleCountdownCues(remaining);
-
-      // Handle halfway point cues
-      _handleHalfwayCues();
-
-      // Handle ticking sound for last 5 seconds
-      if (remaining <= 5 && remaining > 0) {
-        _playTickingSound();
-      } else {
-        _tickingTimer?.cancel();
-      }
-
-      if (_timerController.isCompleted && !_summaryShown) {
-        _summaryShown = true;
-        _confettiController.play();
-
-        // Announce completion
-        if (_audioSettingsService.settings.enableTTS) {
-          _audioEngine.speakCue(AudioCueType.complete);
-        }
-
-        widget.onComplete?.call();
-        _stopAndSaveRun(context, autoComplete: true);
-      }
-
-      setState(() {});
-    });
   }
 
-  void _handleCountdownCues(int remaining) {
-    if (_audioSettingsService.settings.enableCountdownCue &&
-        remaining <= 5 &&
-        remaining > 0 &&
-        remaining != _lastCountdownSecond) {
-      _lastCountdownSecond = remaining;
-      _audioEngine.speakCountdown(remaining);
+  void _onTimerUpdate() {
+    // Handle ticking sound for last 5 seconds
+    _handleTickingSound(_timerController.currentSegmentRemaining);
+
+    // Handle page animation to current segment
+    _animateToCurrentSegment();
+
+    // Handle workout completion
+    if (_timerController.isCompleted && !_summaryShown) {
+      _handleWorkoutCompletion();
     }
 
-    if (remaining > 5) {
-      _lastCountdownSecond = -1;
-    }
+    setState(() {});
   }
 
-  void _handleHalfwayCues() {
-    if (!_audioSettingsService.settings.enableHalfwayCue) return;
-
-    final segment = _timerController.currentSegment;
-    final elapsed = segment.duration - _timerController.currentSegmentRemaining;
-    final halfwayPoint = segment.duration ~/ 2;
-
-    // Check if we're at the halfway point (within 1 second tolerance)
-    if (elapsed >= halfwayPoint && elapsed <= halfwayPoint + 1) {
-      // Make sure we only announce once per segment
-      final currentSegmentKey = "${_timerController.currentIndex}_halfway";
-      if (!_hasAnnouncedHalfway(currentSegmentKey)) {
-        _audioEngine.speakCue(AudioCueType.halfway);
-        _markHalfwayAnnounced(currentSegmentKey);
-      }
-    }
-  }
-
-  final Set<String> _announcedHalfways = {};
-
-  bool _hasAnnouncedHalfway(String key) => _announcedHalfways.contains(key);
-  void _markHalfwayAnnounced(String key) => _announcedHalfways.add(key);
-
-  void _onSegmentChange() {
-    final segment = _timerController.currentSegment;
-    final type = segment.type.name;
-    final duration = _formatDuration(segment.duration);
-
-    debugPrint("🗣️ Segment changed to: $type ($duration)");
-
-    // Prevent duplicate speech on first segment
-    if (!_hasSpokenInitialSegment) {
-      _hasSpokenInitialSegment = true;
-      debugPrint("✅ First segment speech trigger");
+  void _handleTickingSound(int remaining) {
+    if (remaining <= 5 && remaining > 0) {
+      _playTickingSound();
     } else {
-      _voiceDebounceTimer?.cancel();
-      _audioEngine.stop();
-
-      // Announce interval change if enabled
-      if (_audioSettingsService.settings.enableIntervalChangeCue) {
-        _voiceDebounceTimer = Timer(const Duration(milliseconds: 300), () {
-          _audioEngine.speakCue(AudioCueType.intervalChange);
-
-          // Then announce the specific segment type
-          Future.delayed(const Duration(milliseconds: 800), () {
-            final cueType = _getAudioCueTypeForSegment(segment.type.name);
-            if (cueType != null) {
-              _audioEngine.speakCue(cueType);
-            }
-          });
-        });
-      } else {
-        // Just announce the segment type
-        _voiceDebounceTimer = Timer(const Duration(milliseconds: 300), () {
-          final cueType = _getAudioCueTypeForSegment(segment.type.name);
-          if (cueType != null) {
-            _audioEngine.speakCue(cueType);
-          }
-        });
-      }
+      _tickingTimer?.cancel();
     }
+  }
 
-    if (!_isPaused && !_isLocked) {
-      Vibration.hasVibrator().then((hasVibrator) {
-        if (hasVibrator ?? false) {
-          Vibration.vibrate(duration: 100);
-        } else {
-          HapticFeedback.mediumImpact();
-        }
-      });
-    }
+  void _handleWorkoutCompletion() {
+    _summaryShown = true;
+    _confettiController.play();
+    widget.onComplete?.call();
+    _stopAndSaveRun(context, autoComplete: true);
+  }
 
+  void _animateToCurrentSegment() {
     final int index = _timerController.currentIndex;
     final int maxIndex = _timerController.intervals.length - 1;
 
@@ -248,29 +171,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
             curve: Curves.easeInOutCubic,
           )
           .whenComplete(() => _isAnimatingPage = false)
-          .catchError((e) {
-            debugPrint("⚠️ animateToPage error: $e");
-            _isAnimatingPage = false;
-          });
-    } else {
-      debugPrint(
-        '⚠️ Skipping animateToPage: controller not ready or invalid index: $index',
-      );
-    }
-  }
-
-  AudioCueType? _getAudioCueTypeForSegment(String segmentName) {
-    switch (segmentName.toLowerCase()) {
-      case 'warmup':
-        return AudioCueType.warmup;
-      case 'run':
-        return AudioCueType.run;
-      case 'walk':
-        return AudioCueType.walk;
-      case 'cooldown':
-        return AudioCueType.cooldown;
-      default:
-        return null;
+          .catchError((e) => _isAnimatingPage = false);
     }
   }
 
@@ -291,13 +192,12 @@ class _RunSessionScreenState extends State<RunSessionScreen>
 
   @override
   void dispose() {
+    _timerController.removeListener(_onTimerUpdate);
     _timerController.dispose();
     _audioEngine.dispose();
     _confettiController.dispose();
     _intervalPageController.dispose();
-    _voiceDebounceTimer?.cancel();
     _tickingTimer?.cancel();
-    _countdownTimer?.cancel();
     _tickPlayer.dispose();
     _pauseResumeController.dispose();
     super.dispose();
@@ -307,7 +207,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
     BuildContext ctx, {
     bool autoComplete = false,
   }) async {
-    _timerController.stop();
+    await _timerController.stop();
     final runData = await _timerController.generateRunData();
 
     if (runData.durationSeconds >= 60) {
@@ -321,18 +221,22 @@ class _RunSessionScreenState extends State<RunSessionScreen>
         );
       }
 
-      Vibration.hasVibrator().then((hasVibrator) {
-        if (hasVibrator ?? false) {
-          Vibration.vibrate(duration: 300);
-        } else {
-          HapticFeedback.heavyImpact();
-        }
-      });
+      _triggerCompletionHaptic();
     } else if (!autoComplete && ctx.mounted) {
       ScaffoldMessenger.of(
         ctx,
       ).showSnackBar(const SnackBar(content: Text("Run too short to save.")));
     }
+  }
+
+  void _triggerCompletionHaptic() {
+    Vibration.hasVibrator().then((hasVibrator) {
+      if (hasVibrator ?? false) {
+        Vibration.vibrate(duration: 300);
+      } else {
+        HapticFeedback.heavyImpact();
+      }
+    });
   }
 
   String _formatDuration(int seconds) {
@@ -366,10 +270,23 @@ class _RunSessionScreenState extends State<RunSessionScreen>
     }
   }
 
+  void _handlePauseResume() {
+    if (_timerController.isRunning) {
+      setState(() {
+        _pauseResumeController.reverse(from: 1);
+        _timerController.pause();
+      });
+    } else {
+      setState(() {
+        _pauseResumeController.forward(from: 0);
+        _timerController.resume();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return ChangeNotifierProvider.value(
       value: _timerController,
@@ -379,6 +296,8 @@ class _RunSessionScreenState extends State<RunSessionScreen>
           final totalDuration = timer.totalDuration;
           final elapsed = timer.elapsedSeconds;
           final progress = (elapsed / totalDuration).clamp(0.0, 1.0);
+          final currentSegmentRemaining = timer.currentSegmentRemaining;
+          final isPaused = timer.isPaused;
 
           return GestureDetector(
             onHorizontalDragEnd: (details) {
@@ -399,29 +318,6 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                   onPressed: () => Navigator.pop(context),
                 ),
                 actions: [
-                  // Audio status indicator
-                  IconButton(
-                    icon: Icon(
-                      audioSettings.settings.enableTTS
-                          ? Icons.volume_up
-                          : Icons.volume_off,
-                      color: audioSettings.settings.enableTTS
-                          ? Colors.white
-                          : Colors.white54,
-                    ),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            audioSettings.settings.enableTTS
-                                ? "Audio cues enabled (${audioSettings.settings.voice}, ${audioSettings.settings.style})"
-                                : "Audio cues disabled",
-                          ),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                  ),
                   IconButton(
                     icon: Icon(_isLocked ? Icons.lock : Icons.lock_open),
                     onPressed: () => setState(() => _isLocked = !_isLocked),
@@ -432,396 +328,43 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                 children: [
                   Column(
                     children: [
-                      // Background image
-                      SizedBox(
-                        height: MediaQuery.of(context).size.height * 0.45,
-                        child: Stack(
-                          children: [
-                            Positioned.fill(
-                              child: Image.asset(
-                                _getImageForSegment(current.type.name),
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            Positioned.fill(
-                              child: BackdropFilter(
-                                filter: ui.ImageFilter.blur(
-                                  sigmaX: 1.0,
-                                  sigmaY: 1.0,
-                                ),
-                                child: Container(
-                                  color: Colors.black.withOpacity(0.15),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      // Background image section
+                      _buildBackgroundImage(current),
 
                       const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 8,
-                          color: AppColors.warmOrange,
-                          backgroundColor: theme.colorScheme.surface
-                              .withOpacity(0.3),
-                        ),
-                      ),
+
+                      // Progress indicator
+                      _buildProgressIndicator(theme, progress),
+
                       const SizedBox(height: 12),
 
-                      // Interval Cards
-                      SizedBox(
-                        height: 96,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            IconButton(
-                              onPressed: _isLocked ? null : _onSwipeRight,
-                              icon: const Icon(Icons.skip_previous_rounded),
-                              iconSize: 32,
-                              tooltip: "Previous Interval",
-                              color: _isLocked
-                                  ? AppColors.mediumGray
-                                  : theme.colorScheme.primary,
-                            ),
-                            const SizedBox(width: 2),
+                      // Interval navigation section
+                      _buildIntervalNavigation(theme, timer),
 
-                            Expanded(
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 300),
-                                child: ListView.separated(
-                                  key: ValueKey<int>(timer.currentIndex),
-                                  scrollDirection: Axis.horizontal,
-                                  physics: _isLocked
-                                      ? const NeverScrollableScrollPhysics()
-                                      : const BouncingScrollPhysics(),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                  ),
-                                  itemCount: timer.intervals.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(width: 8),
-                                  itemBuilder: (context, idx) {
-                                    final segment = timer.intervals[idx];
-                                    final isCurrent = idx == timer.currentIndex;
-                                    final isCompleted =
-                                        idx < timer.currentIndex;
-                                    return AspectRatio(
-                                      aspectRatio: 1,
-                                      child: AnimatedContainer(
-                                        duration: const Duration(
-                                          milliseconds: 300,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isCompleted
-                                              ? Theme.of(
-                                                  context,
-                                                ).colorScheme.surfaceVariant
-                                              : Theme.of(context).cardColor,
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          border: Border.all(
-                                            color: isCurrent
-                                                ? AppColors.warmOrange
-                                                : Colors.transparent,
-                                            width: 2,
-                                          ),
-                                          boxShadow: isCurrent
-                                              ? [
-                                                  BoxShadow(
-                                                    color: AppColors.warmOrange
-                                                        .withOpacity(0.3),
-                                                    blurRadius: 6,
-                                                    offset: const Offset(0, 3),
-                                                  ),
-                                                ]
-                                              : [],
-                                        ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(6),
-                                          child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              FittedBox(
-                                                fit: BoxFit.scaleDown,
-                                                child: Text(
-                                                  segment.type.name
-                                                      .toUpperCase(),
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: isCurrent
-                                                        ? AppColors.warmOrange
-                                                        : Theme.of(context)
-                                                              .textTheme
-                                                              .bodyMedium
-                                                              ?.color,
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                _formatDuration(
-                                                  segment.duration,
-                                                ),
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  color: isCurrent
-                                                      ? Theme.of(
-                                                          context,
-                                                        ).colorScheme.primary
-                                                      : Theme.of(context)
-                                                            .textTheme
-                                                            .bodySmall
-                                                            ?.color,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(width: 2),
-                            IconButton(
-                              onPressed: _isLocked ? null : _onSwipeLeft,
-                              icon: const Icon(Icons.skip_next_rounded),
-                              iconSize: 32,
-                              tooltip: "Next Interval",
-                              color: _isLocked
-                                  ? AppColors.mediumGray
-                                  : theme.colorScheme.primary,
-                            ),
-                          ],
-                        ),
-                      ),
                       const SizedBox(height: 14),
-                      CircularPercentIndicator(
-                        radius: 54,
-                        lineWidth: 10,
-                        percent:
-                            (1.0 -
-                                    (timer.currentSegmentRemaining /
-                                        timer.currentSegment.duration))
-                                .clamp(0.0, 1.0),
-                        center: Text(
-                          _formatDuration(timer.currentSegmentRemaining),
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.warmOrange,
-                          ),
-                        ),
-                        progressColor: AppColors.warmOrange,
-                        backgroundColor: AppColors.lightGray,
-                        circularStrokeCap: CircularStrokeCap.round,
+
+                      // Circular timer
+                      _buildCircularTimer(
+                        current,
+                        currentSegmentRemaining,
+                        theme,
                       ),
-                      const SizedBox(height: 10),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24.0,
-                          vertical: 12,
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 16,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).cardColor,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.mediumGray.withOpacity(0.02),
-                                blurRadius: 10,
-                                spreadRadius: 1.5,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              // Elapsed
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.timer_outlined,
-                                    size: 24,
-                                    color: AppColors.calmGreen,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    "Total Elapsed: ",
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.calmGreen,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _formatDuration(elapsed),
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurface,
-                                    ),
-                                  ),
-                                ],
-                              ),
 
-                              // Remaining
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.hourglass_bottom,
-                                    size: 24,
-                                    color: AppColors.warmOrange,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    "Total Remaining: ",
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
-                                      color: AppColors.warmOrange,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _formatDuration(
-                                      (totalDuration - elapsed).clamp(
-                                        0,
-                                        totalDuration,
-                                      ),
-                                    ),
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurface,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: _isLocked
-                                ? null
-                                : () {
-                                    setState(() {
-                                      if (_isPaused) {
-                                        _pauseResumeController.forward(from: 0);
-                                        _timerController.resume();
+                      const SizedBox(height: 12),
 
-                                        // Announce resume if enabled
-                                        if (audioSettings
-                                            .settings
-                                            .enableResumeCue) {
-                                          _audioEngine.speakCue(
-                                            AudioCueType.resume,
-                                          );
-                                        }
-                                      } else {
-                                        _pauseResumeController.reverse(from: 1);
-                                        _timerController.pause();
+                      // Time display section
+                      _buildTimeDisplay(theme, elapsed, totalDuration),
 
-                                        // Announce pause if enabled
-                                        if (audioSettings
-                                            .settings
-                                            .enablePauseCue) {
-                                          _audioEngine.speakCue(
-                                            AudioCueType.pause,
-                                          );
-                                        }
-                                      }
-                                      _isPaused = !_isPaused;
-                                    });
-                                  },
-                            icon: Icon(
-                              _isPaused
-                                  ? Icons.play_arrow_rounded
-                                  : Icons.pause_rounded,
-                              size: 24,
-                            ),
-                            label: Text(
-                              _isPaused ? "Resume" : "Pause",
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.calmGreen,
-                              foregroundColor: Theme.of(
-                                context,
-                              ).colorScheme.onPrimary,
-                              minimumSize: const Size(140, 52),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              elevation: 3,
-                            ),
-                          ),
+                      const SizedBox(height: 12),
 
-                          ElevatedButton.icon(
-                            onPressed: _isLocked
-                                ? null
-                                : () async {
-                                    await _stopAndSaveRun(context);
-                                  },
-                            icon: const Icon(Icons.stop_rounded, size: 24),
-                            label: const Text(
-                              "Stop & Save",
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.warmOrange,
-                              foregroundColor: Theme.of(
-                                context,
-                              ).colorScheme.onError,
-                              minimumSize: const Size(140, 52),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              elevation: 3,
-                            ),
-                          ),
-                        ],
-                      ),
+                      // Control buttons
+                      _buildControlButtons(theme, isPaused),
+
                       const SizedBox(height: 20),
                     ],
                   ),
+
+                  // Confetti overlay
                   Align(
                     alignment: Alignment.topCenter,
                     child: ConfettiWidget(
@@ -838,6 +381,390 @@ class _RunSessionScreenState extends State<RunSessionScreen>
           );
         },
       ),
+    );
+  }
+
+  Widget _buildBackgroundImage(WorkoutInterval current) {
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.45,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(
+              _getImageForSegment(current.type.name),
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 1.0, sigmaY: 1.0),
+              child: Container(color: Colors.black.withOpacity(0.15)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressIndicator(ThemeData theme, double progress) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: LinearProgressIndicator(
+        value: progress,
+        minHeight: 8,
+        color: AppColors.warmOrange,
+        backgroundColor: theme.colorScheme.surface.withOpacity(0.3),
+      ),
+    );
+  }
+
+  Widget _buildIntervalNavigation(ThemeData theme, TimerController timer) {
+    return SizedBox(
+      height: 96,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            onPressed: _isLocked ? null : _onSwipeRight,
+            icon: const Icon(Icons.skip_previous_rounded),
+            iconSize: 32,
+            tooltip: "Previous Interval",
+            color: _isLocked ? AppColors.mediumGray : theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 2),
+          Expanded(child: _buildIntervalCards(theme, timer)),
+          const SizedBox(width: 2),
+          IconButton(
+            onPressed: _isLocked ? null : _onSwipeLeft,
+            icon: const Icon(Icons.skip_next_rounded),
+            iconSize: 32,
+            tooltip: "Next Interval",
+            color: _isLocked ? AppColors.mediumGray : theme.colorScheme.primary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIntervalCards(ThemeData theme, TimerController timer) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      child: ListView.separated(
+        key: ValueKey<int>(timer.currentIndex),
+        scrollDirection: Axis.horizontal,
+        controller: _intervalPageController,
+        physics: _isLocked
+            ? const NeverScrollableScrollPhysics()
+            : const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        itemCount: timer.intervals.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, idx) {
+          final segment = timer.intervals[idx];
+          final isCurrent = idx == timer.currentIndex;
+          final isCompleted = idx < timer.currentIndex;
+          return AspectRatio(
+            aspectRatio: 1,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              decoration: BoxDecoration(
+                color: isCompleted
+                    ? theme.colorScheme.surfaceVariant
+                    : theme.cardColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isCurrent ? AppColors.warmOrange : Colors.transparent,
+                  width: 2,
+                ),
+                boxShadow: isCurrent
+                    ? [
+                        BoxShadow(
+                          color: AppColors.warmOrange.withOpacity(0.3),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : [],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        segment.type.name.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: isCurrent
+                              ? AppColors.warmOrange
+                              : theme.textTheme.bodyMedium?.color,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatDuration(segment.duration),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isCurrent
+                            ? theme.colorScheme.primary
+                            : theme.textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCircularTimer(
+    WorkoutInterval current,
+    int currentSegmentRemaining,
+    ThemeData theme,
+  ) {
+    return CircularPercentIndicator(
+      radius: 54,
+      lineWidth: 10,
+      percent: (1.0 - (currentSegmentRemaining / current.duration)).clamp(
+        0.0,
+        1.0,
+      ),
+      center: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            _formatDuration(currentSegmentRemaining),
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.warmOrange,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            current.type.name.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: theme.textTheme.bodySmall?.color,
+            ),
+          ),
+        ],
+      ),
+      progressColor: AppColors.warmOrange,
+      backgroundColor: AppColors.lightGray,
+      circularStrokeCap: CircularStrokeCap.round,
+    );
+  }
+
+  Widget _buildTimeDisplay(ThemeData theme, int elapsed, int totalDuration) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [theme.cardColor, theme.cardColor.withOpacity(0.8)],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              spreadRadius: 0,
+              offset: const Offset(0, 8),
+            ),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 4,
+              spreadRadius: 0,
+              offset: const Offset(0, 2),
+            ),
+          ],
+          border: Border.all(
+            color: theme.colorScheme.outline.withOpacity(0.1),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Elapsed Timer
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.calmGreen.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.timer_outlined,
+                      size: 28,
+                      color: AppColors.calmGreen,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "Elapsed",
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.calmGreen,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatDuration(elapsed),
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Vertical Divider
+            Container(
+              width: 1,
+              height: 60,
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    theme.colorScheme.outline.withOpacity(0.0),
+                    theme.colorScheme.outline.withOpacity(0.3),
+                    theme.colorScheme.outline.withOpacity(0.0),
+                  ],
+                ),
+              ),
+            ),
+
+            // Remaining Timer
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.warmOrange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.hourglass_bottom_outlined,
+                      size: 28,
+                      color: AppColors.warmOrange,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "Remaining",
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.warmOrange,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatDuration(
+                          (totalDuration - elapsed).clamp(0, totalDuration),
+                        ),
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildControlButtons(ThemeData theme, bool isPaused) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        ElevatedButton.icon(
+          onPressed: _isLocked ? null : _handlePauseResume,
+          icon: Icon(
+            isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+            size: 24,
+          ),
+          label: Text(
+            isPaused ? "Resume" : "Pause",
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.calmGreen,
+            foregroundColor: theme.colorScheme.onPrimary,
+            minimumSize: const Size(140, 52),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            elevation: 3,
+          ),
+        ),
+
+        ElevatedButton.icon(
+          onPressed: _isLocked
+              ? null
+              : () async {
+                  await _stopAndSaveRun(context);
+                },
+          icon: const Icon(Icons.stop_rounded, size: 24),
+          label: const Text(
+            "Stop & Save",
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.warmOrange,
+            foregroundColor: theme.colorScheme.onError,
+            minimumSize: const Size(140, 52),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            elevation: 3,
+          ),
+        ),
+      ],
     );
   }
 }

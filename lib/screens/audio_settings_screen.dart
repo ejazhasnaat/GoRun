@@ -14,7 +14,7 @@ class AudioSettingsScreen extends StatefulWidget {
 class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
   late AudioPlaybackEngine _audioEngine;
 
-  final List<String> voiceOptions = const [
+  static const List<String> voiceOptions = [
     'US Female',
     'US Male',
     'UK Female',
@@ -23,11 +23,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
     'IN Male',
   ];
 
-  final List<String> styleOptions = const [
-    'Calm',
-    'Energetic',
-    'Neutral',
-  ];
+  static const List<String> styleOptions = ['Calm', 'Energetic', 'Neutral'];
 
   @override
   void initState() {
@@ -50,20 +46,21 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
   }) async {
     final service = context.read<AudioSettingsService>();
 
-    await service.update(
-      voice: voice,
-      style: style,
-      cueVolume: volume,
-    );
+    await service.update(voice: voice, style: style, cueVolume: volume);
 
     await _audioEngine.reloadSettings(service.settings);
 
     if (preview && service.settings.enableTTS) {
       await _audioEngine.speak(
-        "This is a ${service.settings.style} preview using ${service.settings.voice}."
+        "This is a ${service.settings.style} preview using ${service.settings.voice}.",
       );
     }
 
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _updateCueSetting(Future<void> Function() updateFunction) async {
+    await updateFunction();
     if (mounted) setState(() {});
   }
 
@@ -81,9 +78,11 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
           Card(
             child: SwitchListTile(
               title: const Text("Enable Text-to-Speech (TTS)"),
-              subtitle: Text(settings.enableTTS
-                  ? "Voice announcements are enabled"
-                  : "Voice announcements are disabled"),
+              subtitle: Text(
+                settings.enableTTS
+                    ? "Voice announcements are enabled"
+                    : "Voice announcements are disabled",
+              ),
               value: settings.enableTTS,
               onChanged: (value) async {
                 await audioService.update(enableTTS: value);
@@ -139,12 +138,22 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
             const SizedBox(height: 16),
 
             _sectionHeader("Audio Cue Settings"),
-            _buildCueToggle("Start Cue", "Announce workout start", settings.enableStartCue, (v) => audioService.update(enableStartCue: v)),
-            _buildCueToggle("Halfway Cue", "Announce halfway point during intervals", settings.enableHalfwayCue, (v) => audioService.update(enableHalfwayCue: v)),
-            _buildCueToggle("Countdown Cue", "Count down last 5 seconds of each interval", settings.enableCountdownCue, (v) => audioService.update(enableCountdownCue: v)),
-            _buildCueToggle("Pause Cue", "Announce when workout is paused", settings.enablePauseCue, (v) => audioService.update(enablePauseCue: v)),
-            _buildCueToggle("Resume Cue", "Announce when workout resumes", settings.enableResumeCue, (v) => audioService.update(enableResumeCue: v)),
-            _buildCueToggle("Interval Change Cue", "Announce interval transitions", settings.enableIntervalChangeCue, (v) => audioService.update(enableIntervalChangeCue: v)),
+            _buildCueToggle(
+              "Halfway Cue",
+              "Announce halfway point of the workout",
+              settings.enableHalfwayCue,
+              (v) => _updateCueSetting(
+                () => audioService.update(enableHalfwayCue: v),
+              ),
+            ),
+            _buildCueToggle(
+              "Countdown Cue",
+              "Count down last 5 seconds of each interval",
+              settings.enableCountdownCue,
+              (v) => _updateCueSetting(
+                () => audioService.update(enableCountdownCue: v),
+              ),
+            ),
           ] else
             _buildTTSDisabledMessage(),
         ],
@@ -183,10 +192,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
           onChanged: onChanged,
           underline: const SizedBox(),
           items: options.map((opt) {
-            return DropdownMenuItem<String>(
-              value: opt,
-              child: Text(opt),
-            );
+            return DropdownMenuItem<String>(value: opt, child: Text(opt));
           }).toList(),
         ),
       ),
@@ -201,7 +207,10 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
           children: [
             const Icon(Icons.volume_up),
             const SizedBox(width: 8),
-            const Text("Cue Volume", style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              "Cue Volume",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const Spacer(),
             Text("${(settings.cueVolume * 100).round()}%"),
           ],
@@ -235,13 +244,19 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
           children: [
             Icon(Icons.play_circle_outline),
             SizedBox(width: 8),
-            Text("Test Overall Settings", style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              "Test Overall Settings",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         const SizedBox(height: 12),
         Text(
           "Current Configuration:",
-          style: TextStyle(fontWeight: FontWeight.w500, color: Colors.grey[700]),
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            color: Colors.grey[700],
+          ),
         ),
         const SizedBox(height: 8),
         Container(
@@ -254,11 +269,29 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [const Icon(Icons.record_voice_over, size: 16), const SizedBox(width: 8), Text("Voice: ${settings.voice}")]),
+              Row(
+                children: [
+                  const Icon(Icons.record_voice_over, size: 16),
+                  const SizedBox(width: 8),
+                  Text("Voice: ${settings.voice}"),
+                ],
+              ),
               const SizedBox(height: 4),
-              Row(children: [const Icon(Icons.mood, size: 16), const SizedBox(width: 8), Text("Style: ${settings.style}")]),
+              Row(
+                children: [
+                  const Icon(Icons.mood, size: 16),
+                  const SizedBox(width: 8),
+                  Text("Style: ${settings.style}"),
+                ],
+              ),
               const SizedBox(height: 4),
-              Row(children: [const Icon(Icons.volume_up, size: 16), const SizedBox(width: 8), Text("Volume: ${(settings.cueVolume * 100).round()}%")]),
+              Row(
+                children: [
+                  const Icon(Icons.volume_up, size: 16),
+                  const SizedBox(width: 8),
+                  Text("Volume: ${(settings.cueVolume * 100).round()}%"),
+                ],
+              ),
             ],
           ),
         ),
@@ -269,12 +302,14 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
               child: ElevatedButton.icon(
                 onPressed: () async {
                   await _audioEngine.speak(
-                    "Testing current audio settings. Voice: ${settings.voice}, Style: ${settings.style}, Volume: ${(settings.cueVolume * 100).round()} percent."
+                    "Testing current audio settings. Voice: ${settings.voice}, Style: ${settings.style}, Volume: ${(settings.cueVolume * 100).round()} percent.",
                   );
                 },
                 icon: const Icon(Icons.play_arrow),
                 label: const Text("Test Settings"),
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -282,12 +317,14 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
               child: ElevatedButton.icon(
                 onPressed: () async {
                   await _audioEngine.speak(
-                    "This is a sample workout announcement. Great job! Keep up the excellent work. You're doing amazing!"
+                    "This is a sample workout announcement. Great job! Keep up the excellent work. You're doing amazing!",
                   );
                 },
                 icon: const Icon(Icons.fitness_center),
                 label: const Text("Test Workout Cue"),
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
               ),
             ),
           ],
@@ -309,7 +346,6 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
         value: value,
         onChanged: (val) async {
           await onChanged(val);
-          if (mounted) setState(() {});
         },
       ),
     );
@@ -339,4 +375,3 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
     );
   }
 }
-
