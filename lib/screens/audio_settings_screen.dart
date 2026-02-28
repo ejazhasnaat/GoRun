@@ -71,7 +71,8 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Audio Settings")),
-      body: ListView(
+      body: SafeArea(
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // TTS Master Toggle
@@ -158,6 +159,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
             _buildTTSDisabledMessage(),
         ],
       ),
+      ),
     );
   }
 
@@ -187,13 +189,15 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
         leading: icon != null ? Icon(icon) : null,
         title: Text(label),
         subtitle: Text("Current: $value"),
-        trailing: DropdownButton<String>(
-          value: value,
-          onChanged: onChanged,
-          underline: const SizedBox(),
-          items: options.map((opt) {
-            return DropdownMenuItem<String>(value: opt, child: Text(opt));
-          }).toList(),
+        trailing: Flexible(
+          child: DropdownButton<String>(
+            value: value,
+            onChanged: onChanged,
+            underline: const SizedBox(),
+            items: options.map((opt) {
+              return DropdownMenuItem<String>(value: opt, child: Text(opt));
+            }).toList(),
+          ),
         ),
       ),
     );
@@ -273,7 +277,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
                 children: [
                   const Icon(Icons.record_voice_over, size: 16),
                   const SizedBox(width: 8),
-                  Text("Voice: ${settings.voice}"),
+                  Flexible(child: Text("Voice: ${settings.voice}", overflow: TextOverflow.ellipsis)),
                 ],
               ),
               const SizedBox(height: 4),
@@ -281,7 +285,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
                 children: [
                   const Icon(Icons.mood, size: 16),
                   const SizedBox(width: 8),
-                  Text("Style: ${settings.style}"),
+                  Flexible(child: Text("Style: ${settings.style}", overflow: TextOverflow.ellipsis)),
                 ],
               ),
               const SizedBox(height: 4),
@@ -289,7 +293,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
                 children: [
                   const Icon(Icons.volume_up, size: 16),
                   const SizedBox(width: 8),
-                  Text("Volume: ${(settings.cueVolume * 100).round()}%"),
+                  Flexible(child: Text("Volume: ${(settings.cueVolume * 100).round()}%", overflow: TextOverflow.ellipsis)),
                 ],
               ),
             ],
@@ -306,7 +310,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
                   );
                 },
                 icon: const Icon(Icons.play_arrow),
-                label: const Text("Test Settings"),
+                label: const FittedBox(child: Text("Test Settings")),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
@@ -321,7 +325,7 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
                   );
                 },
                 icon: const Icon(Icons.fitness_center),
-                label: const Text("Test Workout Cue"),
+                label: const FittedBox(child: Text("Test Workout Cue")),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),

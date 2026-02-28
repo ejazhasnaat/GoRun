@@ -66,16 +66,18 @@ class _ProgramSelectorScreenState extends State<ProgramSelectorScreen> {
         backgroundColor: AppColors.calmGreen,
         elevation: 0,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: programs.length,
-              itemBuilder: (context, index) {
-                final program = programs[index];
-                return _buildProgramCard(context, program, theme);
-              },
-            ),
+      body: SafeArea(
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: programs.length,
+                itemBuilder: (context, index) {
+                  final program = programs[index];
+                  return _buildProgramCard(context, program, theme);
+                },
+              ),
+      ),
     );
   }
 
@@ -137,20 +139,25 @@ class _ProgramSelectorScreenState extends State<ProgramSelectorScreen> {
                           ),
                         ),
                         // Distance badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            program.category.distanceLabel,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.w600,
+                        Flexible(
+                          flex: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              program.category.distanceLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
@@ -159,6 +166,8 @@ class _ProgramSelectorScreenState extends State<ProgramSelectorScreen> {
                     const SizedBox(height: 4),
                     Text(
                       program.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.textTheme.bodySmall?.color
                             ?.withValues(alpha: 0.7),

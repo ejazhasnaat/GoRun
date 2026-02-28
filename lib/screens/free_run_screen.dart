@@ -152,87 +152,109 @@ class _FreeRunScreenState extends State<FreeRunScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Timer display
-            Text(
-              _formatDuration(_elapsedSeconds),
-              style: theme.textTheme.displayLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: 72,
-                letterSpacing: -2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Free Run',
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: AppColors.warmOrange,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 48),
-
-            // Control buttons
-            if (!_isRunning) ...[
-              SizedBox(
-                width: 200,
-                height: 56,
-                child: ElevatedButton.icon(
-                  onPressed: _start,
-                  icon: const Icon(Icons.play_arrow_rounded, size: 28),
-                  label: const Text('Start', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.calmGreen,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    elevation: 3,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Timer display
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      _formatDuration(_elapsedSeconds),
+                      style: theme.textTheme.displayLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 72,
+                        letterSpacing: -2,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ] else ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _handlePauseResume,
-                    icon: Icon(
-                      _isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                      size: 24,
-                    ),
-                    label: Text(
-                      _isPaused ? 'Resume' : 'Pause',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.calmGreen,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(140, 52),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      elevation: 3,
+                const SizedBox(height: 8),
+                Text(
+                  'Free Run',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppColors.warmOrange,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 48),
+
+                // Control buttons
+                if (!_isRunning) ...[
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 200),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton.icon(
+                          onPressed: _start,
+                          icon: const Icon(Icons.play_arrow_rounded, size: 28),
+                          label: const Text('Start', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.calmGreen,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 3,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: _stopAndSave,
-                    icon: const Icon(Icons.stop_rounded, size: 24),
-                    label: const Text(
-                      'Stop & Save',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.warmOrange,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(140, 52),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      elevation: 3,
+                ] else ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _handlePauseResume,
+                            icon: Icon(
+                              _isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                              size: 24,
+                            ),
+                            label: Text(
+                              _isPaused ? 'Resume' : 'Pause',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.calmGreen,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(0, 52),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              elevation: 3,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _stopAndSave,
+                            icon: const Icon(Icons.stop_rounded, size: 24),
+                            label: const Text(
+                              'Stop & Save',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.warmOrange,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(0, 52),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              elevation: 3,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
-              ),
-            ],
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

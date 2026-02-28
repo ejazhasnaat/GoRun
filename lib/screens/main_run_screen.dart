@@ -257,7 +257,9 @@ class _MainRunScreenState extends State<MainRunScreen> {
           ),
         ],
       ),
-      body: Stack(
+      body: SafeArea(
+        top: false,
+        child: Stack(
         children: [
           Column(
             children: [
@@ -280,6 +282,8 @@ class _MainRunScreenState extends State<MainRunScreen> {
                             Flexible(
                               child: Text(
                                 "Duration: ${getTotalWorkoutTime(selectedWorkout)} min",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -296,6 +300,8 @@ class _MainRunScreenState extends State<MainRunScreen> {
                             Expanded(
                               child: Text(
                                 formatWorkoutDescription(selectedWorkout),
+                                maxLines: 4,
+                                overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
                               ),
                             ),
@@ -467,6 +473,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

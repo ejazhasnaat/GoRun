@@ -312,7 +312,9 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                   ),
                 ],
               ),
-              body: Stack(
+              body: SafeArea(
+                top: false,
+                child: Stack(
                 children: [
                   Column(
                     children: [
@@ -365,6 +367,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                   ),
                 ],
               ),
+              ),
             ),
           );
         },
@@ -407,8 +410,9 @@ class _RunSessionScreenState extends State<RunSessionScreen>
   }
 
   Widget _buildIntervalNavigation(ThemeData theme, TimerController timer) {
+    final screenHeight = MediaQuery.of(context).size.height;
     return SizedBox(
-      height: 96,
+      height: (screenHeight * 0.12).clamp(0, 96),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -517,8 +521,10 @@ class _RunSessionScreenState extends State<RunSessionScreen>
     int currentSegmentRemaining,
     ThemeData theme,
   ) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final responsiveRadius = (screenWidth / 6).clamp(0, 54).toDouble();
     return CircularPercentIndicator(
-      radius: 54,
+      radius: responsiveRadius,
       lineWidth: 10,
       percent: (1.0 - (currentSegmentRemaining / current.duration)).clamp(
         0.0,
@@ -705,54 +711,60 @@ class _RunSessionScreenState extends State<RunSessionScreen>
   }
 
   Widget _buildControlButtons(ThemeData theme, bool isPaused) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        ElevatedButton.icon(
-          onPressed: _isLocked ? null : _handlePauseResume,
-          icon: Icon(
-            isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-            size: 24,
-          ),
-          label: Text(
-            isPaused ? "Resume" : "Pause",
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.calmGreen,
-            foregroundColor: theme.colorScheme.onPrimary,
-            minimumSize: const Size(140, 52),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _isLocked ? null : _handlePauseResume,
+              icon: Icon(
+                isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                size: 24,
+              ),
+              label: Text(
+                isPaused ? "Resume" : "Pause",
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.calmGreen,
+                foregroundColor: theme.colorScheme.onPrimary,
+                minimumSize: const Size(0, 52),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 3,
+              ),
             ),
-            elevation: 3,
           ),
-        ),
-
-        ElevatedButton.icon(
-          onPressed: _isLocked
-              ? null
-              : () async {
-                  await _stopAndSaveRun(context);
-                },
-          icon: const Icon(Icons.stop_rounded, size: 24),
-          label: const Text(
-            "Stop & Save",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.warmOrange,
-            foregroundColor: theme.colorScheme.onError,
-            minimumSize: const Size(140, 52),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _isLocked
+                  ? null
+                  : () async {
+                      await _stopAndSaveRun(context);
+                    },
+              icon: const Icon(Icons.stop_rounded, size: 24),
+              label: const Text(
+                "Stop & Save",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.warmOrange,
+                foregroundColor: theme.colorScheme.onError,
+                minimumSize: const Size(0, 52),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 3,
+              ),
             ),
-            elevation: 3,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
