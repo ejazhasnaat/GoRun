@@ -3,23 +3,23 @@ import 'package:hive/hive.dart';
 part 'workout_model.g.dart';
 
 @HiveType(typeId: 0)
-class Workout extends HiveObject {
+class CustomWorkout extends HiveObject {
   @HiveField(0)
   String name;
 
   @HiveField(1)
-  List<Interval> intervals;
+  List<CustomInterval> intervals;
 
-  Workout({required this.name, required this.intervals});
+  CustomWorkout({required this.name, required this.intervals});
 }
 
 @HiveType(typeId: 1)
-class Interval {
+class CustomInterval {
   @HiveField(0)
   int runDuration; // seconds
 
   @HiveField(1)
   int walkDuration; // seconds
 
-  Interval({required this.runDuration, required this.walkDuration});
+  CustomInterval({required this.runDuration, required this.walkDuration});
 }

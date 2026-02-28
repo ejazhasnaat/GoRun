@@ -1,7 +1,7 @@
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:geolocator/geolocator.dart';
 import '../features/workouts/workout_model.dart';
 import '../models/run_data.dart';
+import 'program_progress_service.dart';
 
 class LocalStorageService {
   static const String workoutBoxName = 'workouts';
@@ -10,23 +10,24 @@ class LocalStorageService {
   static Future<void> init() async {
     await Hive.initFlutter();
 
-    Hive.registerAdapter(WorkoutAdapter());
-    Hive.registerAdapter(IntervalAdapter());
+    Hive.registerAdapter(CustomWorkoutAdapter());
+    Hive.registerAdapter(CustomIntervalAdapter());
     Hive.registerAdapter(RunDataAdapter());
     Hive.registerAdapter(RoutePointAdapter());
+    Hive.registerAdapter(ProgramProgressAdapter());
 
-    await Hive.openBox<Workout>(workoutBoxName);
+    await Hive.openBox<CustomWorkout>(workoutBoxName);
     await Hive.openBox<RunData>(runDataBoxName);
   }
 
   // ---- Workout Persistence ----
-  static Future<void> saveWorkout(Workout workout) async {
-    final box = Hive.box<Workout>(workoutBoxName);
+  static Future<void> saveWorkout(CustomWorkout workout) async {
+    final box = Hive.box<CustomWorkout>(workoutBoxName);
     await box.add(workout);
   }
 
-  static List<Workout> getWorkouts() {
-    final box = Hive.box<Workout>(workoutBoxName);
+  static List<CustomWorkout> getWorkouts() {
+    final box = Hive.box<CustomWorkout>(workoutBoxName);
     return box.values.toList();
   }
 
@@ -41,4 +42,3 @@ class LocalStorageService {
     return box.values.toList().reversed.toList(); // Most recent first
   }
 }
-

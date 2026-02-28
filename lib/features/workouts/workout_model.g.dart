@@ -6,24 +6,24 @@ part of 'workout_model.dart';
 // TypeAdapterGenerator
 // **************************************************************************
 
-class WorkoutAdapter extends TypeAdapter<Workout> {
+class CustomWorkoutAdapter extends TypeAdapter<CustomWorkout> {
   @override
   final int typeId = 0;
 
   @override
-  Workout read(BinaryReader reader) {
+  CustomWorkout read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return Workout(
+    return CustomWorkout(
       name: fields[0] as String,
-      intervals: (fields[1] as List).cast<Interval>(),
+      intervals: (fields[1] as List).cast<CustomInterval>(),
     );
   }
 
   @override
-  void write(BinaryWriter writer, Workout obj) {
+  void write(BinaryWriter writer, CustomWorkout obj) {
     writer
       ..writeByte(2)
       ..writeByte(0)
@@ -38,29 +38,29 @@ class WorkoutAdapter extends TypeAdapter<Workout> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is WorkoutAdapter &&
+      other is CustomWorkoutAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
 
-class IntervalAdapter extends TypeAdapter<Interval> {
+class CustomIntervalAdapter extends TypeAdapter<CustomInterval> {
   @override
   final int typeId = 1;
 
   @override
-  Interval read(BinaryReader reader) {
+  CustomInterval read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return Interval(
+    return CustomInterval(
       runDuration: fields[0] as int,
       walkDuration: fields[1] as int,
     );
   }
 
   @override
-  void write(BinaryWriter writer, Interval obj) {
+  void write(BinaryWriter writer, CustomInterval obj) {
     writer
       ..writeByte(2)
       ..writeByte(0)
@@ -75,7 +75,7 @@ class IntervalAdapter extends TypeAdapter<Interval> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is IntervalAdapter &&
+      other is CustomIntervalAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

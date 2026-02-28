@@ -74,25 +74,13 @@ class _RunSessionScreenState extends State<RunSessionScreen>
     // Listen for settings changes
     _audioSettingsService.onSettingsChanged = (newSettings) {
       _audioEngine.reloadSettings(newSettings);
-      // Update timer controller audio settings
-      _timerController.updateAudioSettings(
-        enableTTS: newSettings.enableTTS,
-        enableCountdownCue: newSettings.enableCountdownCue,
-        enableHalfwayCue: newSettings.enableHalfwayCue,
-      );
     };
 
     // Initialize timer controller
     _timerController = TimerController(
       workout: widget.workout,
       audioEngine: _audioEngine,
-    );
-
-    // Set initial audio settings
-    _timerController.updateAudioSettings(
-      enableTTS: _audioSettingsService.settings.enableTTS,
-      enableCountdownCue: _audioSettingsService.settings.enableCountdownCue,
-      enableHalfwayCue: _audioSettingsService.settings.enableHalfwayCue,
+      audioSettings: _audioSettingsService.settings,
     );
 
     // Initialize confetti controller
@@ -185,7 +173,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
         return;
       }
       _tickPlayer.stop();
-      _tickPlayer.play(AssetSource('assets/audio/tick.mp3'), volume: 0.5);
+      _tickPlayer.play(AssetSource('audio/tick.mp3'), volume: 0.5);
       tickCount++;
     });
   }
@@ -311,7 +299,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
             },
             child: Scaffold(
               appBar: AppBar(
-                title: const Text("Zero to 5K"),
+                title: const Text("GoRun"),
                 backgroundColor: AppColors.calmGreen,
                 leading: IconButton(
                   icon: const Icon(Icons.arrow_back),

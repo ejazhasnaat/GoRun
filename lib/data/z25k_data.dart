@@ -1,5 +1,8 @@
 // lib/data/z25k_data.dart
 
+import 'models/run_category.dart';
+import 'models/run_program.dart';
+
 // Define types for intervals
 enum IntervalType { warmup, run, walk, cooldown }
 
@@ -66,7 +69,41 @@ class Workout {
   }
 }
 
-class Z25KProgram {
+class FiveKProgram extends RunProgram {
+  static final instance = FiveKProgram._();
+
+  FiveKProgram._();
+
+  @override
+  String get id => 'z25k_v1';
+
+  @override
+  String get displayName => 'Zero to 5K';
+
+  @override
+  String get subtitle => '9-week beginner running program';
+
+  @override
+  RunCategory get category => RunCategory.fiveK;
+
+  @override
+  int get totalWeeks => _weeks.length;
+
+  @override
+  int get daysPerWeek => 3;
+
+  @override
+  bool get isFree => true;
+
+  @override
+  String? get prerequisiteId => null;
+
+  @override
+  String get imagePath => 'assets/images/start.jpg';
+
+  @override
+  List<List<Workout>> get weeks => _weeks;
+
   static const List<List<Workout>> _weeks = [
     // Week 1
     [
@@ -124,12 +161,11 @@ class Z25KProgram {
     ],
   ];
 
-  static List<List<Workout>> get weeks => _weeks;
-
-  static Workout getWorkout(int week, int day) => _weeks[week][day];
-
-  static List<Workout> get allWorkouts => _weeks.expand((week) => week).toList();
-
-  static int get totalWeeks => _weeks.length;
+  // Backward-compatible static accessors
+  static List<List<Workout>> get staticWeeks => instance.weeks;
+  static Workout getStaticWorkout(int week, int day) => instance.getWorkout(week, day);
+  static List<Workout> get allWorkouts => instance.weeks.expand((week) => week).toList();
 }
 
+// Backward-compatibility alias
+typedef Z25KProgram = FiveKProgram;

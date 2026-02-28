@@ -11,11 +11,13 @@ class ProgressChart extends StatelessWidget {
       LineChartData(
         lineBarsData: [
           LineChartBarData(
-            colors: [
-              AppColors.sunriseCoral,
-              AppColors.sunsetOrange,
-              AppColors.oceanicTeal,
-            ],
+            gradient: LinearGradient(
+              colors: [
+                AppColors.calmGreen,
+                AppColors.warmOrange,
+                AppColors.oceanicTeal,
+              ],
+            ),
             spots: const [
               FlSpot(0, 1),
               FlSpot(1, 1.5),
@@ -24,7 +26,7 @@ class ProgressChart extends StatelessWidget {
               FlSpot(4, 5),
             ],
             isCurved: true,
-            dotData: FlDotData(show: true),
+            dotData: const FlDotData(show: true),
           )
         ],
       ),

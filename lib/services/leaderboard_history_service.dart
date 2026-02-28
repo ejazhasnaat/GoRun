@@ -14,7 +14,7 @@ class LeaderboardHistoryService {
   Future<List<RunData>> getTopRunsByDistance({int limit = 10}) async {
     final allRuns = await fetchAllRuns();
 
-    allRuns.sort((a, b) => b.distance.compareTo(a.distance)); // Descending by distance
+    allRuns.sort((a, b) => b.distanceMeters.compareTo(a.distanceMeters)); // Descending by distance
     return allRuns.take(limit).toList();
   }
 
@@ -22,7 +22,7 @@ class LeaderboardHistoryService {
   Future<List<RunData>> getTopRunsByDuration({int limit = 10}) async {
     final allRuns = await fetchAllRuns();
 
-    allRuns.sort((a, b) => b.duration.compareTo(a.duration)); // Descending by duration
+    allRuns.sort((a, b) => b.durationSeconds.compareTo(a.durationSeconds)); // Descending by duration
     return allRuns.take(limit).toList();
   }
 
@@ -30,8 +30,8 @@ class LeaderboardHistoryService {
   Future<List<RunData>> getTopRunsByPace({int limit = 10}) async {
     final allRuns = await fetchAllRuns();
 
-    allRuns.removeWhere((run) => run.pace == 0); // Avoid division-by-zero edge case
-    allRuns.sort((a, b) => a.pace.compareTo(b.pace)); // Ascending by pace (lower = better)
+    allRuns.removeWhere((run) => run.paceSecondsPerKm == 0); // Avoid division-by-zero edge case
+    allRuns.sort((a, b) => a.paceSecondsPerKm.compareTo(b.paceSecondsPerKm)); // Ascending by pace (lower = better)
     return allRuns.take(limit).toList();
   }
 }

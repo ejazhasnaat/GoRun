@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../models/audio_settings_model.dart';
@@ -10,6 +11,7 @@ class AudioPlaybackEngine {
   bool _isSpeaking = false;
   List<dynamic> _availableVoices = [];
   bool _speakCompletionSet = false;
+  Completer<void>? _speechCompleter;
 
   // Cache for optimized voice selection
   Map<String, String>? _cachedVoice;
@@ -60,10 +62,23 @@ class AudioPlaybackEngine {
 
       _tts.setCompletionHandler(() {
         _isSpeaking = false;
+        if (_speechCompleter != null && !_speechCompleter!.isCompleted) {
+          _speechCompleter!.complete();
+        }
+      });
+
+      _tts.setCancelHandler(() {
+        _isSpeaking = false;
+        if (_speechCompleter != null && !_speechCompleter!.isCompleted) {
+          _speechCompleter!.complete();
+        }
       });
 
       _tts.setErrorHandler((message) {
         _isSpeaking = false;
+        if (_speechCompleter != null && !_speechCompleter!.isCompleted) {
+          _speechCompleter!.complete();
+        }
       });
     } catch (e) {
       if (kDebugMode) debugPrint('TTS init error: $e');
@@ -178,25 +193,47 @@ class AudioPlaybackEngine {
     return pitches[_settings.style.toLowerCase()] ?? 1.0;
   }
 
-  Future<void> speak(String text) async {
-    if (!_settings.enableTTS || text.trim().isEmpty) {
-      return;
-    }
+  /// Speaks text and waits for completion via Completer.
+  /// Returns a Future that completes when TTS finishes speaking,
+  /// with a 10-second timeout safety net.
+  Future<void> speakAndWait(String text) async {
+    if (!_settings.enableTTS || text.trim().isEmpty) return;
 
     try {
-      // Always stop any current or potential speech before starting new one
       await _tts.stop();
-      await Future.delayed(const Duration(milliseconds: 100));
+      // Complete any pending completer
+      if (_speechCompleter != null && !_speechCompleter!.isCompleted) {
+        _speechCompleter!.complete();
+      }
 
+      _speechCompleter = Completer<void>();
       await _updateTTSParameters();
 
       _isSpeaking = true;
       await _tts.speak(text);
 
-      if (_speakCompletionSet) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        if (_isSpeaking) _isSpeaking = false;
-      }
+      // Await the completer with a 10s timeout
+      await _speechCompleter!.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          _isSpeaking = false;
+        },
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('TTS speakAndWait error: $e');
+      _isSpeaking = false;
+    }
+  }
+
+  Future<void> speak(String text) async {
+    if (!_settings.enableTTS || text.trim().isEmpty) return;
+
+    try {
+      await _tts.stop();
+      await _updateTTSParameters();
+
+      _isSpeaking = true;
+      await _tts.speak(text);
     } catch (e) {
       if (kDebugMode) debugPrint('TTS speak error: $e');
       _isSpeaking = false;
@@ -207,20 +244,12 @@ class AudioPlaybackEngine {
     if (!_settings.enableTTS || !_shouldSpeak(type)) return;
 
     try {
-      // Always stop any current or potential speech before starting new one
       await _tts.stop();
-      await Future.delayed(const Duration(milliseconds: 100));
-
       final phrase = _phraseMappings[type] ?? "Unknown cue";
       await _updateTTSParameters();
 
       _isSpeaking = true;
       await _tts.speak(phrase);
-
-      if (_speakCompletionSet) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        if (_isSpeaking) _isSpeaking = false;
-      }
     } catch (e) {
       if (kDebugMode) debugPrint('TTS cue error: $e');
       _isSpeaking = false;
@@ -236,11 +265,6 @@ class AudioPlaybackEngine {
       await _updateTTSParameters();
       _isSpeaking = true;
       await _tts.speak(seconds.toString());
-
-      if (_speakCompletionSet) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        if (_isSpeaking) _isSpeaking = false;
-      }
     } catch (e) {
       if (kDebugMode) debugPrint('TTS countdown error: $e');
       _isSpeaking = false;
@@ -278,6 +302,10 @@ class AudioPlaybackEngine {
   Future<void> stop() async {
     try {
       _isSpeaking = false;
+      // Complete any pending completer
+      if (_speechCompleter != null && !_speechCompleter!.isCompleted) {
+        _speechCompleter!.complete();
+      }
       await _tts.stop();
     } catch (e) {
       if (kDebugMode) debugPrint('TTS stop error: $e');

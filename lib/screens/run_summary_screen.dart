@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:zero_to_5k/models/run_data.dart';
+import '../models/run_data.dart';
 
 class RunSummaryScreen extends StatelessWidget {
   final RunData run;
