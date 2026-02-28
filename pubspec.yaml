@@ -1,4 +1,4 @@
-name: zero_to_5k
+name: gorun
 description: "From First Step to Finish Line"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.

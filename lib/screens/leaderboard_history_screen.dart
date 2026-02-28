@@ -137,7 +137,8 @@ class _LeaderboardHistoryScreenState extends State<LeaderboardHistoryScreen> {
           ),
         ],
       ),
-      body: _runHistory.isEmpty
+      body: SafeArea(
+        child: _runHistory.isEmpty
           ? const Center(child: Text("No run history yet."))
           : SingleChildScrollView(
               child: Column(
@@ -180,7 +181,7 @@ class _LeaderboardHistoryScreenState extends State<LeaderboardHistoryScreen> {
                               sideTitles: SideTitles(
                                 showTitles: true,
                                 getTitlesWidget: _leftTitles,
-                                reservedSize: 44,
+                                reservedSize: (MediaQuery.of(context).size.width * 0.12).clamp(32, 44),
                               ),
                             ),
                             bottomTitles: AxisTitles(
@@ -211,6 +212,8 @@ class _LeaderboardHistoryScreenState extends State<LeaderboardHistoryScreen> {
                         title: Text(DateFormat('yyyy-MM-dd – kk:mm').format(run.startTime)),
                         subtitle: Text(
                           "Distance: ${run.formattedDistance} • Duration: ${run.formattedDuration} • Pace: ${run.formattedPace}",
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                         onTap: () => _navigateToSummary(run),
@@ -220,6 +223,7 @@ class _LeaderboardHistoryScreenState extends State<LeaderboardHistoryScreen> {
                 ],
               ),
             ),
+      ),
     );
   }
 }

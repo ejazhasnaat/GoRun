@@ -5,7 +5,7 @@ import 'services/audio_settings_service.dart';
 import 'app.dart';
 import 'services/local_storage_service.dart';
 import 'services/feedback_settings_service.dart';
-import 'services/settings_helper.dart';
+import 'helpers/settings_helper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,17 +19,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AudioSettingsService()),
         ChangeNotifierProvider(create: (_) => FeedbackSettingsService()),
       ],
-      //child: const ZeroTo5KApp(),
-      child: Consumer<ThemeService>(
-        builder: (context, themeService, _) {
-          return MaterialApp(
-            title: 'Zero to 5K',
-            theme: themeService.currentTheme,
-            home: const ZeroTo5KApp(),
-            debugShowCheckedModeBanner: false,
-          );
-        },
-      ),
+      child: const GoRunApp(),
     ),
   );
 }

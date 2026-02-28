@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:zero_to_5k/models/run_data.dart';
+import '../models/run_data.dart';
 
 class RunSummaryScreen extends StatelessWidget {
   final RunData run;
@@ -17,12 +17,16 @@ class RunSummaryScreen extends StatelessWidget {
     final routePoints = run.route.map((p) => LatLng(p.latitude, p.longitude)).toList();
     final hasRoute = routePoints.isNotEmpty;
 
+    final screenHeight = MediaQuery.of(context).size.height;
+    final mapHeight = (screenHeight * 0.28).clamp(0.0, 220.0);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Run Summary"),
         centerTitle: true,
       ),
-      body: Padding(
+      body: SafeArea(
+        child: Padding(
         padding: const EdgeInsets.all(20),
         child: SingleChildScrollView(
           child: Column(
@@ -35,6 +39,8 @@ class RunSummaryScreen extends StatelessWidget {
               ),
               Text(
                 "Start: $formattedStartTime  •  End: $formattedEndTime",
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 14, color: Colors.grey),
               ),
               const SizedBox(height: 20),
@@ -48,10 +54,10 @@ class RunSummaryScreen extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _statBox("Distance", run.formattedDistance),
-                      _statBox("Duration", run.formattedDuration),
-                      _statBox("Pace", run.formattedPace),
-                      _statBox("Calories", run.formattedCalories),
+                      Expanded(child: _statBox("Distance", run.formattedDistance)),
+                      Expanded(child: _statBox("Duration", run.formattedDuration)),
+                      Expanded(child: _statBox("Pace", run.formattedPace)),
+                      Expanded(child: _statBox("Calories", run.formattedCalories)),
                     ],
                   ),
                 ),
@@ -72,7 +78,7 @@ class RunSummaryScreen extends StatelessWidget {
               // Map Route
               if (hasRoute)
                 SizedBox(
-                  height: 220,
+                  height: mapHeight,
                   child: Card(
                     elevation: 2,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -116,7 +122,7 @@ class RunSummaryScreen extends StatelessWidget {
                 )
               else
                 Container(
-                  height: 220,
+                  height: mapHeight,
                   decoration: BoxDecoration(
                     color: Colors.grey[200],
                     borderRadius: BorderRadius.circular(12),
@@ -145,6 +151,7 @@ class RunSummaryScreen extends StatelessWidget {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -153,7 +160,12 @@ class RunSummaryScreen extends StatelessWidget {
       children: [
         Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey)),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
       ],
     );
   }

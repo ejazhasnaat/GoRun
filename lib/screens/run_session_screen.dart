@@ -74,25 +74,13 @@ class _RunSessionScreenState extends State<RunSessionScreen>
     // Listen for settings changes
     _audioSettingsService.onSettingsChanged = (newSettings) {
       _audioEngine.reloadSettings(newSettings);
-      // Update timer controller audio settings
-      _timerController.updateAudioSettings(
-        enableTTS: newSettings.enableTTS,
-        enableCountdownCue: newSettings.enableCountdownCue,
-        enableHalfwayCue: newSettings.enableHalfwayCue,
-      );
     };
 
     // Initialize timer controller
     _timerController = TimerController(
       workout: widget.workout,
       audioEngine: _audioEngine,
-    );
-
-    // Set initial audio settings
-    _timerController.updateAudioSettings(
-      enableTTS: _audioSettingsService.settings.enableTTS,
-      enableCountdownCue: _audioSettingsService.settings.enableCountdownCue,
-      enableHalfwayCue: _audioSettingsService.settings.enableHalfwayCue,
+      audioSettings: _audioSettingsService.settings,
     );
 
     // Initialize confetti controller
@@ -185,7 +173,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
         return;
       }
       _tickPlayer.stop();
-      _tickPlayer.play(AssetSource('assets/audio/tick.mp3'), volume: 0.5);
+      _tickPlayer.play(AssetSource('audio/tick.mp3'), volume: 0.5);
       tickCount++;
     });
   }
@@ -311,7 +299,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
             },
             child: Scaffold(
               appBar: AppBar(
-                title: const Text("Zero to 5K"),
+                title: const Text("GoRun"),
                 backgroundColor: AppColors.calmGreen,
                 leading: IconButton(
                   icon: const Icon(Icons.arrow_back),
@@ -324,12 +312,14 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                   ),
                 ],
               ),
-              body: Stack(
+              body: SafeArea(
+                top: false,
+                child: Stack(
                 children: [
                   Column(
                     children: [
-                      // Background image section
-                      _buildBackgroundImage(current),
+                      // Background image section (flexible to absorb overflow)
+                      Expanded(child: _buildBackgroundImage(current)),
 
                       const SizedBox(height: 8),
 
@@ -377,6 +367,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                   ),
                 ],
               ),
+              ),
             ),
           );
         },
@@ -385,9 +376,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
   }
 
   Widget _buildBackgroundImage(WorkoutInterval current) {
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.45,
-      child: Stack(
+    return Stack(
         children: [
           Positioned.fill(
             child: Image.asset(
@@ -402,7 +391,6 @@ class _RunSessionScreenState extends State<RunSessionScreen>
             ),
           ),
         ],
-      ),
     );
   }
 
@@ -419,8 +407,9 @@ class _RunSessionScreenState extends State<RunSessionScreen>
   }
 
   Widget _buildIntervalNavigation(ThemeData theme, TimerController timer) {
+    final screenHeight = MediaQuery.of(context).size.height;
     return SizedBox(
-      height: 96,
+      height: (screenHeight * 0.12).clamp(0, 96),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -529,8 +518,10 @@ class _RunSessionScreenState extends State<RunSessionScreen>
     int currentSegmentRemaining,
     ThemeData theme,
   ) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final responsiveRadius = (screenWidth / 6).clamp(0, 54).toDouble();
     return CircularPercentIndicator(
-      radius: 54,
+      radius: responsiveRadius,
       lineWidth: 10,
       percent: (1.0 - (currentSegmentRemaining / current.duration)).clamp(
         0.0,
@@ -603,42 +594,47 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: AppColors.calmGreen.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Icon(
                       Icons.timer_outlined,
-                      size: 28,
+                      size: 24,
                       color: AppColors.calmGreen,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Elapsed",
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.calmGreen,
-                          letterSpacing: 0.5,
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Elapsed",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.calmGreen,
+                            letterSpacing: 0.5,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatDuration(elapsed),
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
-                          letterSpacing: -0.5,
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _formatDuration(elapsed),
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -648,7 +644,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
             Container(
               width: 1,
               height: 60,
-              margin: const EdgeInsets.symmetric(horizontal: 20),
+              margin: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -668,24 +664,25 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: AppColors.warmOrange.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Icon(
                       Icons.hourglass_bottom_outlined,
-                      size: 28,
+                      size: 24,
                       color: AppColors.warmOrange,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Remaining",
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Remaining",
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -693,19 +690,23 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                           letterSpacing: 0.5,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatDuration(
-                          (totalDuration - elapsed).clamp(0, totalDuration),
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _formatDuration(
+                              (totalDuration - elapsed).clamp(0, totalDuration),
+                            ),
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
                         ),
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -717,54 +718,60 @@ class _RunSessionScreenState extends State<RunSessionScreen>
   }
 
   Widget _buildControlButtons(ThemeData theme, bool isPaused) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        ElevatedButton.icon(
-          onPressed: _isLocked ? null : _handlePauseResume,
-          icon: Icon(
-            isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-            size: 24,
-          ),
-          label: Text(
-            isPaused ? "Resume" : "Pause",
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.calmGreen,
-            foregroundColor: theme.colorScheme.onPrimary,
-            minimumSize: const Size(140, 52),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _isLocked ? null : _handlePauseResume,
+              icon: Icon(
+                isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                size: 24,
+              ),
+              label: Text(
+                isPaused ? "Resume" : "Pause",
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.calmGreen,
+                foregroundColor: theme.colorScheme.onPrimary,
+                minimumSize: const Size(0, 52),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 3,
+              ),
             ),
-            elevation: 3,
           ),
-        ),
-
-        ElevatedButton.icon(
-          onPressed: _isLocked
-              ? null
-              : () async {
-                  await _stopAndSaveRun(context);
-                },
-          icon: const Icon(Icons.stop_rounded, size: 24),
-          label: const Text(
-            "Stop & Save",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.warmOrange,
-            foregroundColor: theme.colorScheme.onError,
-            minimumSize: const Size(140, 52),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _isLocked
+                  ? null
+                  : () async {
+                      await _stopAndSaveRun(context);
+                    },
+              icon: const Icon(Icons.stop_rounded, size: 24),
+              label: const Text(
+                "Stop & Save",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.warmOrange,
+                foregroundColor: theme.colorScheme.onError,
+                minimumSize: const Size(0, 52),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 3,
+              ),
             ),
-            elevation: 3,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

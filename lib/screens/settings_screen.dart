@@ -31,7 +31,8 @@ class SettingsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Settings")),
-      body: ListView(
+      body: SafeArea(
+        child: ListView(
         children: [
           _sectionHeader(context, "Appearance"),
           SwitchListTile(
@@ -49,6 +50,8 @@ class SettingsScreen extends StatelessWidget {
               audioSettings.enableTTS
                   ? "TTS: ${audioSettings.voice} (${audioSettings.style})"
                   : "TTS: Disabled",
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
             onTap: () => Navigator.push(
@@ -88,6 +91,8 @@ class SettingsScreen extends StatelessWidget {
             subtitle: Text(
               "Height: ${formatHeight(feedbackService.height)}, "
               "Weight: ${formatWeight(feedbackService.weight)}",
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             trailing: const Icon(Icons.arrow_forward_ios),
             onTap: () => Navigator.push(
@@ -146,6 +151,7 @@ class SettingsScreen extends StatelessWidget {
             },
           ),
         ],
+      ),
       ),
     );
   }

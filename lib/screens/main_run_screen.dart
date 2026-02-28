@@ -1,27 +1,27 @@
-
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:confetti/confetti.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 import '../data/z25k_data.dart';
+import '../data/models/run_program.dart';
 import '../utils/workout_formatter.dart';
 import '../core/theme/app_colors.dart';
+import '../services/program_progress_service.dart';
 import 'run_session_screen.dart';
 import 'settings_screen.dart';
 import 'leaderboard_history_screen.dart';
 
 class MainRunScreen extends StatefulWidget {
-  const MainRunScreen({super.key});
+  final RunProgram program;
+
+  const MainRunScreen({super.key, required this.program});
 
   @override
   State<MainRunScreen> createState() => _MainRunScreenState();
 }
 
-final GlobalKey _menuKey = GlobalKey();
-
 class _MainRunScreenState extends State<MainRunScreen> {
+  final GlobalKey _menuKey = GlobalKey();
   late Workout selectedWorkout;
   late int selectedWeekIndex;
   late int selectedDayIndex;
@@ -45,8 +45,10 @@ class _MainRunScreenState extends State<MainRunScreen> {
 
     // Jump to initial page in center
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final initialPage = selectedWeekIndex * 3 + selectedDayIndex;
-      _pageController.jumpToPage(initialPage);
+      if (!isLoading) {
+        final initialPage = selectedWeekIndex * widget.program.daysPerWeek + selectedDayIndex;
+        _pageController.jumpToPage(initialPage);
+      }
     });
   }
 
@@ -60,27 +62,37 @@ class _MainRunScreenState extends State<MainRunScreen> {
   }
 
   void _loadProgress() async {
-    final prefs = await SharedPreferences.getInstance();
+    final progress = await ProgramProgressService.getProgress(widget.program.id);
     if (!mounted) return;
     setState(() {
-      lastCompletedDayIndex = prefs.getInt('lastCompletedDayIndex') ?? -1;
-      selectedWeekIndex = prefs.getInt('selectedWeekIndex') ?? 0;
-      selectedDayIndex = prefs.getInt('selectedDayIndex') ?? 0;
-      selectedWorkout = Z25KProgram.weeks[selectedWeekIndex][selectedDayIndex];
+      lastCompletedDayIndex = progress.lastCompletedDayIndex;
+      selectedWeekIndex = progress.selectedWeekIndex;
+      selectedDayIndex = progress.selectedDayIndex;
+      selectedWorkout = widget.program.getWorkout(selectedWeekIndex, selectedDayIndex);
       isLoading = false;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final initialPage = selectedWeekIndex * widget.program.daysPerWeek + selectedDayIndex;
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(initialPage);
+      }
     });
   }
 
   void _saveProgress() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('lastCompletedDayIndex', lastCompletedDayIndex);
-    await prefs.setInt('selectedWeekIndex', selectedWeekIndex);
-    await prefs.setInt('selectedDayIndex', selectedDayIndex);
+    final progress = ProgramProgress(
+      programId: widget.program.id,
+      lastCompletedDayIndex: lastCompletedDayIndex,
+      selectedWeekIndex: selectedWeekIndex,
+      selectedDayIndex: selectedDayIndex,
+    );
+    await ProgramProgressService.saveProgress(progress);
   }
 
   void _onWorkoutCompleted() {
     setState(() {
-      final currentIndex = selectedWeekIndex * 3 + selectedDayIndex;
+      final currentIndex = selectedWeekIndex * widget.program.daysPerWeek + selectedDayIndex;
       if (currentIndex > lastCompletedDayIndex) {
         lastCompletedDayIndex = currentIndex;
         _confettiController.play();
@@ -91,7 +103,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
 
   Future<void> _playSwipeSound() async {
     try {
-      await audioPlayer.play(AssetSource('audio/swipe.mp3')); // Add this to assets
+      await audioPlayer.play(AssetSource('audio/swipe.mp3'));
     } catch (_) {
       // Ignore errors silently
     }
@@ -99,44 +111,12 @@ class _MainRunScreenState extends State<MainRunScreen> {
 
   void _onDayPageChanged(int index) {
     _playSwipeSound();
+    final daysPerWeek = widget.program.daysPerWeek;
     setState(() {
-      selectedWeekIndex = index ~/ 3;
-      selectedDayIndex = index % 3;
-      selectedWorkout = Z25KProgram.weeks[selectedWeekIndex][selectedDayIndex];
+      selectedWeekIndex = index ~/ daysPerWeek;
+      selectedDayIndex = index % daysPerWeek;
+      selectedWorkout = widget.program.getWorkout(selectedWeekIndex, selectedDayIndex);
     });
-  }
-
-  void _onDayCardTap(int index) {
-    setState(() {
-      selectedWeekIndex = index ~/ 3;
-      selectedDayIndex = index % 3;
-      selectedWorkout = Z25KProgram.weeks[selectedWeekIndex][selectedDayIndex];
-    });
-
-    _scrollController.animateTo(
-      (index - 1).clamp(0, 999) * cardWidth,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
-  }
-
-  void _navigateDay(int direction) {
-    final newIndex = selectedWeekIndex * 3 + selectedDayIndex + direction;
-    final totalDays = Z25KProgram.weeks.length * 3;
-
-    if (newIndex >= 0 && newIndex < totalDays) {
-      setState(() {
-        selectedWeekIndex = newIndex ~/ 3;
-        selectedDayIndex = newIndex % 3;
-        selectedWorkout = Z25KProgram.weeks[selectedWeekIndex][selectedDayIndex];
-      });
-
-      _scrollController.animateTo(
-        (newIndex - 1).clamp(0, 999) * cardWidth,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
   }
 
   void _showOptionsMenu() {
@@ -185,7 +165,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
   }
 
   void _onStartRunning() {
-    final currentIndex = selectedWeekIndex * 3 + selectedDayIndex;
+    final currentIndex = selectedWeekIndex * widget.program.daysPerWeek + selectedDayIndex;
     if (currentIndex > lastCompletedDayIndex + 1) {
       _showSkipStartDialog();
     } else {
@@ -249,11 +229,12 @@ class _MainRunScreenState extends State<MainRunScreen> {
 
     final dayLabels = <String>[];
     final workouts = <Workout>[];
+    final daysPerWeek = widget.program.daysPerWeek;
 
-    for (int week = 0; week < Z25KProgram.weeks.length; week++) {
-      for (int day = 0; day < Z25KProgram.weeks[week].length; day++) {
+    for (int week = 0; week < widget.program.totalWeeks; week++) {
+      for (int day = 0; day < widget.program.weeks[week].length; day++) {
         dayLabels.add('WEEK ${week + 1}\nDAY ${day + 1}');
-        workouts.add(Z25KProgram.weeks[week][day]);
+        workouts.add(widget.program.weeks[week][day]);
       }
     }
 
@@ -264,7 +245,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text("Zero to 5K"),
+        title: Text(widget.program.displayName),
         centerTitle: true,
         backgroundColor: AppColors.calmGreen,
         elevation: 0,
@@ -276,7 +257,9 @@ class _MainRunScreenState extends State<MainRunScreen> {
           ),
         ],
       ),
-      body: Stack(
+      body: SafeArea(
+        top: false,
+        child: Stack(
         children: [
           Column(
             children: [
@@ -299,6 +282,8 @@ class _MainRunScreenState extends State<MainRunScreen> {
                             Flexible(
                               child: Text(
                                 "Duration: ${getTotalWorkoutTime(selectedWorkout)} min",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -315,6 +300,8 @@ class _MainRunScreenState extends State<MainRunScreen> {
                             Expanded(
                               child: Text(
                                 formatWorkoutDescription(selectedWorkout),
+                                maxLines: 4,
+                                overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
                               ),
                             ),
@@ -333,7 +320,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(24),
                     child: Image.asset(
-                      'assets/images/start.jpg',
+                      widget.program.imagePath,
                       fit: BoxFit.cover,
                       width: double.infinity,
                     ),
@@ -348,7 +335,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
                   children: [
                     LinearProgressIndicator(
                       value: progress,
-                      backgroundColor: colorScheme.surfaceVariant,
+                      backgroundColor: colorScheme.surfaceContainerHighest,
                       color: colorScheme.primary,
                       minHeight: 10,
                     ),
@@ -398,7 +385,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
                           itemCount: dayLabels.length,
                           onPageChanged: _onDayPageChanged,
                           itemBuilder: (context, index) {
-                            final isSelected = index == selectedWeekIndex * 3 + selectedDayIndex;
+                            final isSelected = index == selectedWeekIndex * daysPerWeek + selectedDayIndex;
                             final isCompleted = index <= lastCompletedDayIndex;
 
                             final cardColor = isSelected
@@ -423,15 +410,15 @@ class _MainRunScreenState extends State<MainRunScreen> {
                                 duration: const Duration(milliseconds: 300),
                                 margin: const EdgeInsets.symmetric(horizontal: 6),
                                 width: cardWidth,
-                                height: cardWidth, // ✅ Square cards
+                                height: cardWidth,
                                 decoration: BoxDecoration(
                                   color: cardColor,
-                                  border: Border.all(color: AppColors.calmGreen, width: 2), // ✅ Always calmGreen
+                                  border: Border.all(color: AppColors.calmGreen, width: 2),
                                   borderRadius: BorderRadius.circular(14),
                                   boxShadow: isSelected
                                       ? [
                                           BoxShadow(
-                                            color: AppColors.calmGreen.withOpacity(0.4),
+                                            color: AppColors.calmGreen.withValues(alpha: 0.4),
                                             blurRadius: 8,
                                             offset: const Offset(0, 4),
                                           )
@@ -465,173 +452,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
                     ),
                   ],
                 ),
-              )
-
-              /* OLD
-              Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: SizedBox(
-                  height: cardHeight,
-                  child: PageView.builder(
-                    controller: _pageController,
-                    itemCount: dayLabels.length,
-                    onPageChanged: _onDayPageChanged,
-                    itemBuilder: (context, index) {
-                      final isSelected = index == selectedWeekIndex * 3 + selectedDayIndex;
-                      final isCompleted = index <= lastCompletedDayIndex;
-
-                      final cardColor = isSelected
-                          ? AppColors.calmGreen
-                          : isCompleted
-                              ? colorScheme.secondary
-                              : theme.cardColor;
-
-                      final textColor = isSelected || isCompleted
-                          ? colorScheme.onPrimary
-                          : theme.textTheme.bodyMedium?.color;
-
-                      return GestureDetector(
-                        onTap: () {
-                          _pageController.animateToPage(
-                            index,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeInOut,
-                          );
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          margin: const EdgeInsets.symmetric(horizontal: 6),
-                          width: cardWidth,
-                          decoration: BoxDecoration(
-                            color: cardColor,
-                            border: Border.all(color: AppColors.calmGreen, width: 2),
-                            borderRadius: BorderRadius.circular(14),
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                      color: AppColors.calmGreen.withOpacity(0.4),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 4),
-                                    )
-                                  ]
-                                : [],
-                          ),
-                          padding: const EdgeInsets.all(12),
-                          child: Center(
-                            child: Text(
-                              dayLabels[index],
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: textColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
               ),
-              */
-              /* Older
-              GestureDetector(
-                onHorizontalDragEnd: (details) {
-                  if (details.primaryVelocity == null) return;
-
-                  if (details.primaryVelocity! < 0) {
-                    _navigateDay(1); // Swipe left → next
-                  } else if (details.primaryVelocity! > 0) {
-                    _navigateDay(-1); // Swipe right → previous
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: Icon(Icons.chevron_left, size: 28, color: AppColors.calmGreen),
-                        onPressed: () => _navigateDay(-1),
-                      ),
-                      Expanded(
-                        child: SizedBox(
-                          height: cardHeight,
-                          child: ListView.builder(
-                            controller: _scrollController,
-                            scrollDirection: Axis.horizontal,
-                            itemCount: dayLabels.length,
-                            itemBuilder: (context, index) {
-                              final isSelected = (index == selectedWeekIndex * 3 + selectedDayIndex);
-                              final isCompleted = (index <= lastCompletedDayIndex);
-
-                              final cardColor = isSelected
-                                  ? AppColors.calmGreen
-                                  : isCompleted
-                                      ? colorScheme.secondary.withOpacity(0.15)
-                                      : theme.cardColor;
-
-                              final borderColor = isSelected
-                                  ? AppColors.calmGreen
-                                  : isCompleted
-                                      ? AppColors.warmOrange
-                                      : Colors.grey.shade300;
-
-                              final textColor = isSelected || isCompleted
-                                  ? colorScheme.onPrimary
-                                  : theme.textTheme.bodyMedium?.color;
-
-                              return GestureDetector(
-                                onTap: () => _onDayCardTap(index),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 300),
-                                  width: cardWidth,
-                                  margin: const EdgeInsets.symmetric(horizontal: 6),
-                                  decoration: BoxDecoration(
-                                    color: cardColor,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: borderColor,
-                                      width: isSelected ? 2.5 : 1.5,
-                                    ),
-                                    boxShadow: isSelected
-                                        ? [
-                                            BoxShadow(
-                                              color: AppColors.calmGreen.withOpacity(0.3),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 4),
-                                            )
-                                          ]
-                                        : [],
-                                  ),
-                                  padding: const EdgeInsets.all(12),
-                                  child: Center(
-                                    child: Text(
-                                      dayLabels[index],
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: textColor,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.chevron_right, size: 28, color: AppColors.calmGreen),
-                        onPressed: () => _navigateDay(1),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              */
-
             ],
           ),
 
@@ -653,7 +474,7 @@ class _MainRunScreenState extends State<MainRunScreen> {
           ),
         ],
       ),
+      ),
     );
   }
 }
-
