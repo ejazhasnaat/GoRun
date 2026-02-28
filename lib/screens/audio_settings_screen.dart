@@ -189,9 +189,11 @@ class _AudioSettingsScreenState extends State<AudioSettingsScreen> {
         leading: icon != null ? Icon(icon) : null,
         title: Text(label),
         subtitle: Text("Current: $value"),
-        trailing: Flexible(
+        trailing: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 150),
           child: DropdownButton<String>(
             value: value,
+            isExpanded: true,
             onChanged: onChanged,
             underline: const SizedBox(),
             items: options.map((opt) {

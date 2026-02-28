@@ -318,8 +318,8 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                 children: [
                   Column(
                     children: [
-                      // Background image section
-                      _buildBackgroundImage(current),
+                      // Background image section (flexible to absorb overflow)
+                      Expanded(child: _buildBackgroundImage(current)),
 
                       const SizedBox(height: 8),
 
@@ -376,9 +376,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
   }
 
   Widget _buildBackgroundImage(WorkoutInterval current) {
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.45,
-      child: Stack(
+    return Stack(
         children: [
           Positioned.fill(
             child: Image.asset(
@@ -393,7 +391,6 @@ class _RunSessionScreenState extends State<RunSessionScreen>
             ),
           ),
         ],
-      ),
     );
   }
 
@@ -597,42 +594,47 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: AppColors.calmGreen.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Icon(
                       Icons.timer_outlined,
-                      size: 28,
+                      size: 24,
                       color: AppColors.calmGreen,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Elapsed",
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.calmGreen,
-                          letterSpacing: 0.5,
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Elapsed",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.calmGreen,
+                            letterSpacing: 0.5,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatDuration(elapsed),
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
-                          letterSpacing: -0.5,
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _formatDuration(elapsed),
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -642,7 +644,7 @@ class _RunSessionScreenState extends State<RunSessionScreen>
             Container(
               width: 1,
               height: 60,
-              margin: const EdgeInsets.symmetric(horizontal: 20),
+              margin: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -662,24 +664,25 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: AppColors.warmOrange.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Icon(
                       Icons.hourglass_bottom_outlined,
-                      size: 28,
+                      size: 24,
                       color: AppColors.warmOrange,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "Remaining",
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Remaining",
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -687,19 +690,23 @@ class _RunSessionScreenState extends State<RunSessionScreen>
                           letterSpacing: 0.5,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatDuration(
-                          (totalDuration - elapsed).clamp(0, totalDuration),
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _formatDuration(
+                              (totalDuration - elapsed).clamp(0, totalDuration),
+                            ),
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
                         ),
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
